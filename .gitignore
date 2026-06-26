@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+backend/db.sqlite3
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+AGENTS.md
