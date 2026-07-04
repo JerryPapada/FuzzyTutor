@@ -1,35 +1,41 @@
 # Frontend Implementation Plan
 
-## Phase 1: Learning Workspace
+## Current Frontend Shape
 
-- Build a full task workflow for MCQ tasks.
-- Add sandbox code-writing task UI with a syntax-highlighted editor.
-- Track elapsed time, hint/documentation expansions, and submission events.
-- Add robust loading, error, and empty states for all API calls.
+- Left sidebar: clickable modules such as Python Lists, Arrays, Dictionaries, Classes, Inheritance, Exceptions, and Control Flow.
+- Each module card shows a module score and an aggregate score.
+- Center panel: one active task at a time, either MCQ or coding.
+- Right sidebar: aggregate fuzzy metrics, recommendation, and support message.
 
-## Phase 2: Explainable AI Sidebar
+## Phase 1: Workspace Shell
 
-- Replace placeholder metrics with live evaluation results after each submission.
-- Add mastery and friction gauges.
-- Add linguistic state badges such as Focused & Steady, Rushing, Needs Support, and Frustrated.
-- Show concise supportive explanations when the backend queues them.
+- Keep the app layout as a fixed three-column learning workspace.
+- Keep module selection in the left sidebar and task rendering in the center panel.
+- Keep the fuzzy statistics panel on the right.
+- Maintain loading and empty states when modules or tasks are not yet loaded.
 
-## Phase 3: Curriculum & Progress
+## Phase 2: Task Interaction
 
-- Add module navigation and task history.
-- Show difficulty tier, task archetype, and progress through each module.
-- Add transitions between MCQ and sandbox tasks.
-- Add a student session summary view.
+- Support MCQ selection and simple code-response entry.
+- Track elapsed time per task.
+- Support back/forward navigation inside the current module or task sequence.
+- Send submission data to the fuzzy endpoint after each response.
 
-## Phase 4: Feedback Loops
+## Phase 3: Progress and Scores
 
-- Trigger micro-surveys every 5 tasks.
-- Collect satisfaction with difficulty, clarity, and perceived support.
-- Add educator-facing feedback hooks if required by the evaluation design.
+- Show per-module progress and scores in the sidebar.
+- Show the current task position inside the active module.
+- Keep aggregate mastery and friction visible in the right panel.
+- Add stronger visual feedback when the learner needs support or looks ready to advance.
 
-## Phase 5: Polish & Accessibility
+## Phase 4: Feedback and Surveys
 
-- Add keyboard-friendly interactions and visible focus states.
-- Validate responsive layouts for mobile, tablet, and desktop.
-- Add accessible labels for gauges, editor controls, choices, and survey inputs.
-- Add frontend tests for task rendering, submission flow, and XAI panel updates.
+- Trigger micro-surveys every five tasks if needed for evaluation.
+- Collect student feedback on difficulty, clarity, and support.
+- Show short explanations from the backend when the fuzzy engine returns them.
+
+## Phase 5: Polish and Accessibility
+
+- Keep the layout responsive on mobile and tablet.
+- Ensure module cards, task options, and buttons are keyboard accessible.
+- Add tests for module switching, task rendering, and fuzzy metric updates.
