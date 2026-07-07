@@ -9,3 +9,5 @@ frontend/dist/
 frontend/.vite/
 
 AGENTS.md
+.agents/
+.codex/
