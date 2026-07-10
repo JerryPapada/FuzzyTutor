@@ -71,7 +71,7 @@ def predict_mastery(
         correctness_score,
         task_type,
     )
-
+    # Define the fuzzy rules and their corresponding outputs based on the memberships and consequent weights
     rule_specs = [
         (
             "secure_prior_mastery",
