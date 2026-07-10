@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "drf_spectacular",
     "apps.core",
     "apps.learning",
     "apps.fuzzy",
@@ -75,6 +76,18 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
 ).split(",")
 
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "FuzzyTutor API",
+    "DESCRIPTION": (
+        "Adaptive programming tutor API with a Mamdani cognitive-friction model, "
+        "trainable ANFIS mastery model, learner sessions, submissions, surveys, "
+        "adaptation decisions, and training-data export."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }

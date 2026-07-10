@@ -8,7 +8,7 @@ FRICTION_CENTROIDS = {
     "severe": 92.0,
 }
 
-
+# Compute membership values for each linguistic variable
 def _memberships(relative_response_time, assistance_interactions, completion_ratio):
     time_pressure = {
         "low": left_shoulder(relative_response_time, 0.45, 0.95),
@@ -31,7 +31,7 @@ def _memberships(relative_response_time, assistance_interactions, completion_rat
         "completion": completion,
     }
 
-
+# Compute the predicted cognitive friction score using fuzzy inference
 def infer_cognitive_friction(
     relative_response_time,
     assistance_interactions,

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-
+# Serializer for input data to the fuzzy evaluation engine
 class FuzzyEvaluationInputSerializer(serializers.Serializer):
     taskMetricWeight = serializers.FloatField(default=50.0, min_value=0.0, max_value=100.0)
     historicalGradeAverage = serializers.FloatField(default=70.0, min_value=0.0, max_value=100.0)
@@ -15,7 +15,7 @@ class FuzzyEvaluationInputSerializer(serializers.Serializer):
     def validate_taskType(self, value):
         return str(value).lower()
 
-
+# Serializer for output data from the fuzzy evaluation engine
 class FuzzyEvaluationOutputSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
     systemCognitiveFriction = serializers.FloatField()

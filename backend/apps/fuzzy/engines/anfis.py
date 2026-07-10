@@ -1,5 +1,10 @@
+from .anfis_training import (
+    DEFAULT_CONSEQUENT_WEIGHTS,
+    consequent_output,
+    feature_vector,
+    load_trained_parameters,
+)
 from .utils import clamp, left_shoulder, right_shoulder, triangular, weighted_average
-
 
 def _correctness_signal(is_correct, completion_ratio):
     if is_correct is True:
@@ -8,7 +13,7 @@ def _correctness_signal(is_correct, completion_ratio):
         return 20.0
     return 45.0 + (completion_ratio * 35.0)
 
-
+# Compute membership values for each linguistic variable
 def _memberships(task_weight, historical_grade, completion_ratio, correctness_score):
     return {
         "challenge": {
@@ -33,7 +38,7 @@ def _memberships(task_weight, historical_grade, completion_ratio, correctness_sc
         },
     }
 
-
+# Compute the predicted mastery score using the ANFIS model
 def predict_mastery(
     task_weight,
     historical_grade,
@@ -53,23 +58,25 @@ def predict_mastery(
     correctness = memberships["correctness"]
     challenge = memberships["challenge"]
 
-    code_penalty = 3.0 if str(task_type).lower() == "code" and completion_ratio < 1 else 0.0
-
-    def consequent(history_weight, completion_weight, correctness_weight, challenge_weight):
-        value = (
-            (history_weight * historical_grade)
-            + (completion_weight * completion_ratio * 100.0)
-            + (correctness_weight * correctness_score)
-            + (challenge_weight * task_weight)
-            - code_penalty
-        )
-        return clamp(value)
+    trained_parameters = load_trained_parameters()
+    consequent_weights = (
+        trained_parameters.get("consequentWeights")
+        if trained_parameters
+        else DEFAULT_CONSEQUENT_WEIGHTS
+    )
+    features = feature_vector(
+        task_weight,
+        historical_grade,
+        completion_ratio,
+        correctness_score,
+        task_type,
+    )
 
     rule_specs = [
         (
             "secure_prior_mastery",
             min(history["high"], completion["high"], correctness["strong"]),
-            consequent(0.48, 0.22, 0.22, 0.08),
+            consequent_output(consequent_weights["secure_prior_mastery"], features),
         ),
         (
             "developing_mastery",
@@ -77,12 +84,12 @@ def predict_mastery(
                 min(history["medium"], completion["high"]),
                 min(history["high"], correctness["emerging"]),
             ),
-            consequent(0.52, 0.24, 0.18, 0.06),
+            consequent_output(consequent_weights["developing_mastery"], features),
         ),
         (
             "productive_challenge",
             min(challenge["advanced"], completion["high"], correctness["strong"]),
-            consequent(0.42, 0.23, 0.25, 0.10),
+            consequent_output(consequent_weights["productive_challenge"], features),
         ),
         (
             "fragile_progress",
@@ -90,7 +97,7 @@ def predict_mastery(
                 min(history["medium"], completion["medium"]),
                 min(correctness["emerging"], completion["medium"]),
             ),
-            consequent(0.58, 0.23, 0.15, 0.04),
+            consequent_output(consequent_weights["fragile_progress"], features),
         ),
         (
             "knowledge_gap",
@@ -98,7 +105,7 @@ def predict_mastery(
                 min(history["low"], correctness["weak"]),
                 min(completion["low"], correctness["weak"]),
             ),
-            consequent(0.60, 0.20, 0.16, 0.04),
+            consequent_output(consequent_weights["knowledge_gap"], features),
         ),
     ]
 
@@ -114,7 +121,7 @@ def predict_mastery(
 
     mastery = weighted_average(
         [(rule["strength"], rule["output"]) for rule in active_rules],
-        fallback=consequent(0.55, 0.22, 0.18, 0.05),
+        fallback=consequent_output(DEFAULT_CONSEQUENT_WEIGHTS["developing_mastery"], features),
     )
 
     return {
@@ -122,11 +129,7 @@ def predict_mastery(
         "memberships": memberships,
         "rules": active_rules,
         "correctnessSignal": round(correctness_score, 2),
-        "contributionWeights": {
-            "historicalGradeAverage": 0.55,
-            "completionRatio": 0.22,
-            "correctnessOrCompletionSignal": 0.18,
-            "taskMetricWeight": 0.05,
-        },
-        "modelType": "transparent_rule_weighted_anfis_style",
+        "contributionWeights": consequent_weights,
+        "modelType": "trained_anfis" if trained_parameters else "transparent_rule_weighted_anfis_style",
+        "trainingMetadata": trained_parameters.get("metadata") if trained_parameters else None,
     }

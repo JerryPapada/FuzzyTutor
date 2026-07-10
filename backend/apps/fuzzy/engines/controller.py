@@ -11,7 +11,7 @@ FOCUS_THRESHOLDS = {
     "low_mastery_max": 45.0,
 }
 
-
+# Determine the focus state based on cognitive friction and mastery
 def focus_state_for(friction, mastery):
     if (
         friction < FOCUS_THRESHOLDS["steady_friction_max"]
@@ -22,7 +22,7 @@ def focus_state_for(friction, mastery):
         return "Needs Support"
     return "Frustrated"
 
-
+# Determine the recommendation based on mastery and cognitive friction
 def recommendation_for(mastery, friction):
     if (
         mastery >= FOCUS_THRESHOLDS["high_mastery_min"]
@@ -36,7 +36,7 @@ def recommendation_for(mastery, friction):
         return "reduce_difficulty_and_show_support"
     return "hold_current_tier"
 
-
+# Provide a support message based on the focus state
 def support_message_for(focus_state):
     if focus_state == "Focused & Steady":
         return "The student looks ready for the next challenge."
@@ -44,7 +44,7 @@ def support_message_for(focus_state):
         return "Keep the tier steady and add a short explanation."
     return "Reduce the difficulty and offer a guided prompt."
 
-
+# Evaluate the learning state based on various inputs and return a structured result
 def evaluate_learning_state(inputs):
     task_weight = clamp(inputs["taskMetricWeight"])
     historical_grade = clamp(inputs["historicalGradeAverage"])

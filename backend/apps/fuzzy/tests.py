@@ -1,12 +1,17 @@
+import tempfile
+from pathlib import Path
+from django.core.management import call_command
 from django.test import SimpleTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
-
+from apps.learning.models import FuzzyEvaluationLog, LearnerSession
 from .engines.anfis import predict_mastery
+from .engines.anfis_training import generate_synthetic_training_rows, load_trained_parameters
 from .engines.controller import focus_state_for, recommendation_for
 from .engines.mamdani import infer_cognitive_friction
 
-
+# Test cases for the Mamdani fuzzy inference engine
 class MamdaniFrictionTests(SimpleTestCase):
     def test_low_time_low_assistance_complete_task_produces_low_friction(self):
         result = infer_cognitive_friction(
@@ -74,6 +79,14 @@ class AnfisMasteryTests(SimpleTestCase):
 
         self.assertGreaterEqual(result["score"], 0)
         self.assertLessEqual(result["score"], 100)
+
+    def test_synthetic_rows_include_target_mastery_label(self):
+        rows = generate_synthetic_training_rows(count=10, seed=5)
+
+        self.assertEqual(len(rows), 10)
+        self.assertIn("targetMastery", rows[0])
+        self.assertGreaterEqual(rows[0]["targetMastery"], 0)
+        self.assertLessEqual(rows[0]["targetMastery"], 100)
 
 
 class AdaptationControllerTests(SimpleTestCase):
@@ -158,3 +171,49 @@ class FuzzyEvaluationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+# Test cases for the ANFIS training commands
+class AnfisTrainingCommandTests(TestCase):
+    def test_seed_command_creates_synthetic_training_logs(self):
+        call_command("seed_anfis_training_data", count=12, seed=9, clear_existing=True)
+
+        self.assertEqual(LearnerSession.objects.filter(token__startswith="synthetic-anfis-").count(), 12)
+        self.assertEqual(FuzzyEvaluationLog.objects.count(), 12)
+        first_log = FuzzyEvaluationLog.objects.select_related("submission").first()
+        self.assertTrue(first_log.submission.answer_payload["synthetic"])
+        self.assertIn("targetMastery", first_log.submission.answer_payload)
+
+    def test_train_command_writes_parameter_file(self):
+        call_command("seed_anfis_training_data", count=40, seed=11, clear_existing=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "anfis_parameters.json"
+            call_command(
+                "train_anfis",
+                epochs=8,
+                min_samples=20,
+                output=str(output_path),
+            )
+
+            self.assertTrue(output_path.exists())
+            parameters = load_trained_parameters(output_path)
+            self.assertEqual(parameters["modelType"], "trained_anfis")
+            self.assertEqual(parameters["metadata"]["sampleCount"], 40)
+            self.assertIn("secure_prior_mastery", parameters["consequentWeights"])
+
+    def test_evaluate_command_reports_metrics_for_trained_parameters(self):
+        call_command("seed_anfis_training_data", count=40, seed=12, clear_existing=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "anfis_parameters.json"
+            call_command(
+                "train_anfis",
+                epochs=8,
+                min_samples=20,
+                output=str(output_path),
+            )
+            call_command(
+                "evaluate_anfis",
+                parameters=str(output_path),
+                min_samples=20,
+            )
