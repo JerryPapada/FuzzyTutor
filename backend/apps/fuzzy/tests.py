@@ -6,6 +6,7 @@ from django.test import TestCase
 from apps.learning.models import FuzzyEvaluationLog, LearnerSession
 from .engines.anfis import predict_mastery
 from .engines.anfis_training import generate_synthetic_training_rows, load_trained_parameters
+from .engines.mamdani import infer_cognitive_friction
 
 
 class AnfisMasteryTests(SimpleTestCase):
@@ -50,6 +51,17 @@ class AnfisMasteryTests(SimpleTestCase):
         self.assertLessEqual(rows[0]["targetMastery"], 100)
 
 
+class MamdaniFrictionTests(SimpleTestCase):
+    def test_stalled_incomplete_behavior_has_more_friction_than_steady_completion(self):
+        steady = infer_cognitive_friction(0.9, 0, 1.0, "mcq")
+        stalled = infer_cognitive_friction(2.3, 6, 0.2, "mcq")
+
+        self.assertLess(steady["score"], stalled["score"])
+        self.assertEqual(steady["defuzzification"], "centroid_of_aggregated_output_area")
+        self.assertGreater(steady["aggregatedArea"], 0)
+        self.assertGreater(stalled["aggregatedArea"], 0)
+
+
 class AnfisTrainingCommandTests(TestCase):
     def test_seed_command_creates_synthetic_training_logs(self):
         call_command("seed_anfis_training_data", count=12, seed=9, clear_existing=True)
@@ -76,6 +88,9 @@ class AnfisTrainingCommandTests(TestCase):
             parameters = load_trained_parameters(output_path)
             self.assertEqual(parameters["modelType"], "trained_anfis")
             self.assertEqual(parameters["metadata"]["sampleCount"], 40)
+            self.assertEqual(parameters["metadata"]["trainingSampleCount"], 32)
+            self.assertEqual(parameters["metadata"]["validationSampleCount"], 8)
+            self.assertIn("holdoutMetrics", parameters["metadata"])
             self.assertIn("secure_prior_mastery", parameters["consequentWeights"])
 
     def test_evaluate_command_reports_metrics_for_trained_parameters(self):

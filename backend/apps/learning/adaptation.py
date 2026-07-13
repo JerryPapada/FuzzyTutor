@@ -1,4 +1,4 @@
-from .catalog import TASK_BANK, get_task, tasks_for_module
+from .catalog import CURRICULUM_MODULES, get_task, tasks_for_module
 
 # Find the task closest to the target difficulty level
 def _nearest_task(candidates, target_level, current_task_id):
@@ -35,11 +35,13 @@ def select_next_task(session, current_task, fuzzy_result):
         direction = "hold"
         reason = "Signals are mixed, so the tutor keeps the current difficulty band."
 
+    completed_task_ids = set(session.submissions.values_list("task_id", flat=True))
     module_tasks = tasks_for_module(current_task["moduleId"])
     same_module_candidates = [
         task
         for task in module_tasks
-        if task["id"] != current_task["id"] and task["difficultyLevel"] == target_level
+        if task["id"] not in completed_task_ids
+        and task["difficultyLevel"] == target_level
     ]
     next_task = _nearest_task(same_module_candidates, target_level, current_task["id"])
     scope = "module"
@@ -47,20 +49,29 @@ def select_next_task(session, current_task, fuzzy_result):
     # Edge case of no available or properly reccomended task
     if next_task is None:
         wider_module_candidates = [
-            task for task in module_tasks if task["id"] != current_task["id"]
+            task for task in module_tasks if task["id"] not in completed_task_ids
         ]
         next_task = _nearest_task(wider_module_candidates, target_level, current_task["id"])
 
     if next_task is None:
-        global_candidates = [
-            task for task in TASK_BANK if task["id"] != current_task["id"]
-        ]
-        next_task = _nearest_task(global_candidates, target_level, current_task["id"])
-        scope = "catalog"
+        module_ids = [module["id"] for module in CURRICULUM_MODULES]
+        current_position = module_ids.index(current_task["moduleId"])
+        later_module_ids = module_ids[current_position + 1 :] + module_ids[:current_position]
+        for module_id in later_module_ids:
+            candidates = [
+                task
+                for task in tasks_for_module(module_id)
+                if task["id"] not in completed_task_ids
+            ]
+            if candidates:
+                next_task = _nearest_task(candidates, target_level, current_task["id"])
+                scope = "next_module"
+                break
 
+    curriculum_complete = next_task is None
     if next_task is None:
         next_task = current_task
-        scope = "current_task"
+        scope = "curriculum_complete"
 
     session.current_module_id = next_task["moduleId"]
     session.current_task_id = next_task["id"]
@@ -72,6 +83,7 @@ def select_next_task(session, current_task, fuzzy_result):
             "targetDifficultyLevel": target_level,
             "selectedDifficulty": next_task["difficulty"],
             "selectedScope": scope,
+            "curriculumComplete": curriculum_complete,
             "reason": reason,
             "signals": {
                 "knowledgeMastery": mastery,

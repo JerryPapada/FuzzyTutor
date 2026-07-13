@@ -1,12 +1,43 @@
-from .utils import clamp, left_shoulder, right_shoulder, triangular, weighted_average
+from .utils import clamp, left_shoulder, right_shoulder, triangular
 
 
-FRICTION_CENTROIDS = {
-    "low": 15.0,
-    "moderate": 42.0,
-    "high": 72.0,
-    "severe": 92.0,
+OUTPUT_SETS = {
+    "low": {"shape": "left_shoulder", "parameters": [15.0, 35.0]},
+    "moderate": {"shape": "triangular", "parameters": [20.0, 42.0, 64.0]},
+    "high": {"shape": "triangular", "parameters": [48.0, 72.0, 90.0]},
+    "severe": {"shape": "right_shoulder", "parameters": [72.0, 92.0]},
 }
+
+
+def _output_membership(consequent, value):
+    output_set = OUTPUT_SETS[consequent]
+    parameters = output_set["parameters"]
+    if output_set["shape"] == "left_shoulder":
+        return left_shoulder(value, *parameters)
+    if output_set["shape"] == "right_shoulder":
+        return right_shoulder(value, *parameters)
+    return triangular(value, *parameters)
+
+
+def _centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0):
+    """Clip consequent sets, aggregate them with max, and calculate area centroid."""
+    universe = [index * resolution for index in range(int(100 / resolution) + 1)]
+    aggregated = []
+    for value in universe:
+        membership = max(
+            (
+                min(rule["strength"], _output_membership(rule["consequent"], value))
+                for rule in active_rules
+            ),
+            default=0.0,
+        )
+        aggregated.append(membership)
+
+    denominator = sum(aggregated)
+    if denominator <= 0:
+        return fallback, 0.0
+    centroid = sum(value * membership for value, membership in zip(universe, aggregated)) / denominator
+    return centroid, denominator * resolution
 
 # Compute membership values for each linguistic variable
 def _memberships(relative_response_time, assistance_interactions, completion_ratio):
@@ -95,14 +126,13 @@ def infer_cognitive_friction(
             "rule": rule_name,
             "strength": round(clamp(strength, 0.0, 1.0), 4),
             "consequent": consequent,
-            "centroid": FRICTION_CENTROIDS[consequent],
         }
         for rule_name, strength, consequent in rule_specs
         if strength > 0
     ]
 
-    friction = weighted_average(
-        [(rule["strength"], rule["centroid"]) for rule in active_rules],
+    friction, aggregated_area = _centroid_of_aggregated_output(
+        active_rules,
         fallback=42.0 if is_code_task else 25.0,
     )
 
@@ -110,5 +140,7 @@ def infer_cognitive_friction(
         "score": clamp(friction),
         "memberships": memberships,
         "rules": active_rules,
-        "defuzzification": "centroid_weighted_average",
+        "outputSets": OUTPUT_SETS,
+        "aggregatedArea": round(aggregated_area, 4),
+        "defuzzification": "centroid_of_aggregated_output_area",
     }

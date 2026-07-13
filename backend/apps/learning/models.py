@@ -20,6 +20,18 @@ class LearnerSession(models.Model):
     def __str__(self):
         return self.token
 
+    def pending_survey_milestone(self):
+        """Return the oldest unanswered five-task survey milestone."""
+        answered = set(
+            self.micro_surveys.exclude(milestone_task_count=0).values_list(
+                "milestone_task_count", flat=True
+            )
+        )
+        for milestone in range(5, self.completed_task_count + 1, 5):
+            if milestone not in answered:
+                return milestone
+        return None
+
 # Task submission model to track performance
 class TaskSubmission(models.Model):
     session = models.ForeignKey(
@@ -94,8 +106,15 @@ class MicroSurveyResponse(models.Model):
     satisfaction_score = models.PositiveSmallIntegerField()
     perceived_difficulty = models.PositiveSmallIntegerField()
     confidence_score = models.PositiveSmallIntegerField()
+    milestone_task_count = models.PositiveIntegerField(default=0)
     comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "milestone_task_count"],
+                name="unique_session_survey_milestone",
+            )
+        ]

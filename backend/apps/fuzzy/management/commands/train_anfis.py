@@ -3,7 +3,10 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.fuzzy.engines.anfis import _correctness_signal, _memberships
 from apps.fuzzy.engines.anfis_training import (
     feature_vector,
+    predict_sample_mastery,
+    regression_metrics,
     save_trained_parameters,
+    split_training_samples,
     synthetic_target_mastery,
     train_consequent_parameters,
 )
@@ -80,6 +83,8 @@ class Command(BaseCommand):
         parser.add_argument("--learning-rate", type=float, default=0.00002)
         parser.add_argument("--min-samples", type=int, default=30)
         parser.add_argument("--output", type=str, default=None)
+        parser.add_argument("--validation-fraction", type=float, default=0.2)
+        parser.add_argument("--split-seed", type=int, default=42)
         parser.add_argument(
             "--include-real-only",
             action="store_true",
@@ -87,6 +92,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not 0.0 < options["validation_fraction"] < 1.0:
+            raise CommandError("--validation-fraction must be greater than 0 and less than 1.")
         logs = FuzzyEvaluationLog.objects.select_related("submission", "session").all()
         if options["include_real_only"]:
             logs = logs.exclude(session__token__startswith="synthetic-anfis-")
@@ -97,28 +104,47 @@ class Command(BaseCommand):
                 f"Need at least {options['min_samples']} samples to train; found {len(samples)}."
             )
 
-        weights, losses = train_consequent_parameters(
+        training_samples, validation_samples = split_training_samples(
             samples,
+            validation_fraction=options["validation_fraction"],
+            seed=options["split_seed"],
+        )
+        weights, losses = train_consequent_parameters(
+            training_samples,
             epochs=options["epochs"],
             learning_rate=options["learning_rate"],
+        )
+        holdout_metrics = regression_metrics(
+            [sample["targetMastery"] for sample in validation_samples],
+            [predict_sample_mastery(sample, weights) for sample in validation_samples],
         )
         parameters = {
             "modelType": "trained_anfis",
             "consequentWeights": weights,
             "metadata": {
                 "sampleCount": len(samples),
+                "trainingSampleCount": len(training_samples),
+                "validationSampleCount": len(validation_samples),
+                "validationFraction": options["validation_fraction"],
+                "splitSeed": options["split_seed"],
                 "epochs": options["epochs"],
                 "learningRate": options["learning_rate"],
                 "initialLoss": round(losses[0], 4),
                 "finalLoss": round(losses[-1], 4),
                 "trainingSource": "stored learner telemetry with synthetic bootstrap rows allowed",
+                "holdoutMetrics": {
+                    key: round(value, 4) if isinstance(value, float) else value
+                    for key, value in holdout_metrics.items()
+                },
             },
         }
         output_path = save_trained_parameters(parameters, options["output"])
         self.stdout.write(
             self.style.SUCCESS(
                 "Trained ANFIS parameters with "
-                f"{len(samples)} samples. Loss {losses[0]:.4f} -> {losses[-1]:.4f}. "
+                f"{len(training_samples)} training and {len(validation_samples)} holdout samples. "
+                f"Loss {losses[0]:.4f} -> {losses[-1]:.4f}; "
+                f"holdout RMSE {holdout_metrics['rmse']:.4f}. "
                 f"Saved to {output_path}."
             )
         )

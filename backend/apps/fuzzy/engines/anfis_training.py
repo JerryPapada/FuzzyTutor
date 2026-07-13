@@ -222,6 +222,16 @@ def train_consequent_parameters(samples, initial_weights=None, epochs=650, learn
         losses.append(total_loss / max(1, len(samples)))
     return weights, losses
 
+
+def split_training_samples(samples, validation_fraction=0.2, seed=42):
+    """Create a deterministic train/holdout split for honest model evaluation."""
+    shuffled = list(samples)
+    random.Random(seed).shuffle(shuffled)
+    if len(shuffled) < 2 or validation_fraction <= 0:
+        return shuffled, []
+    validation_count = max(1, min(len(shuffled) - 1, round(len(shuffled) * validation_fraction)))
+    return shuffled[validation_count:], shuffled[:validation_count]
+
 # Predict the mastery score for a given sample
 def predict_sample_mastery(sample, consequent_weights):
     strengths = sample["ruleStrengths"]

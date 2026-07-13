@@ -89,6 +89,7 @@ Response shape:
   "completedTaskCount": 0,
   "latestRecommendation": "hold_current_tier",
   "surveyDue": false,
+  "curriculumComplete": false,
   "currentTask": {
     "id": "lists-mcq-001",
     "moduleId": 1,
@@ -142,7 +143,6 @@ Payload:
   "elapsedTimeSeconds": 42.5,
   "assistanceInteractions": 0,
   "completionRatio": 1.0,
-  "isCorrect": true,
   "selectedChoice": "Adds an item to the end",
   "answerText": "",
   "answerPayload": {
@@ -154,7 +154,7 @@ Payload:
 For MCQ:
 
 - Send `selectedChoice`.
-- It is acceptable to send `isCorrect`, but the backend can also derive it if `selectedChoice` is present.
+- Do not send `isCorrect`; the backend derives correctness from its private answer key.
 
 For code tasks:
 
@@ -164,7 +164,7 @@ For code tasks:
   - `completionRatio = 1` if the answer has meaningful content.
   - `completionRatio = 0` if empty.
   - Optionally use intermediate values later if the UI can detect partial progress.
-- `isCorrect` can be omitted or set based on completion only.
+- Do not send `isCorrect`. Code completion is behavioral evidence, not correctness or automated grading.
 
 Response includes:
 
@@ -185,6 +185,7 @@ Response includes:
     "targetDifficultyLevel": 2,
     "selectedDifficulty": "intermediate",
     "selectedScope": "module",
+    "curriculumComplete": false,
     "reason": "High mastery with low friction supports a harder or equivalent task.",
     "signals": {
       "knowledgeMastery": 92.81,
@@ -216,7 +217,7 @@ mixed signals -> hold difficulty
 
 Frontend should not decide adaptive difficulty itself.
 
-The current Back/Forward buttons can remain as manual catalog browsing, but the primary learning flow should follow `nextTask` from `/api/learning/submissions/`.
+The current Back/Forward buttons can remain as preview-only catalog browsing, but submissions must use the session's current backend-selected task. The primary learning flow should follow `nextTask` from `/api/learning/submissions/`. To begin a session from a previewed task, create a new session with that `taskId`.
 
 Recommended UX:
 
@@ -233,7 +234,7 @@ Avoid exposing raw rule names as the main UI copy. They can be placed in an expa
 
 ### 3.4 Add Micro-Survey UI Every 5 Tasks
 
-When `surveyDue` is true, show a compact modal or inline panel after the submission result.
+When `surveyDue` is true, show a compact modal or inline panel after the submission result. The backend keeps the oldest unanswered five-task milestone due across refreshes until a survey is accepted.
 
 Endpoint:
 
@@ -330,6 +331,8 @@ Tasks now include:
 }
 ```
 
+Task responses never include `correctChoice` or `answerGuide`. Do not calculate correctness in the frontend.
+
 Frontend should display:
 
 - task type
@@ -414,6 +417,8 @@ After successful survey submission:
 setSurveyDue(false);
 ```
 
+The response also returns `milestoneTaskCount` and the updated `surveyDue`. A duplicate survey for the same milestone returns HTTP 400.
+
 ## 6. Acceptance Checklist
 
 The frontend is ready when:
@@ -426,7 +431,7 @@ The frontend is ready when:
 - Micro-survey appears every 5 submitted tasks.
 - Code tasks are not sandbox-graded.
 - Refresh does not immediately lose the learner session if localStorage is used.
-- Swagger docs at `/api/docs/` match the API calls used by the frontend.
+- Swagger docs at `/api/docs/` provide typed request and response contracts matching the frontend workflow.
 
 ## 7. Example End-to-End Flow
 

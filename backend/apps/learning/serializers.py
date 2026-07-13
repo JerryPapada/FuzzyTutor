@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .catalog import get_task
+from .catalog import TASK_BANK, get_task
 from .models import LearnerSession
 
 # Serializers for the learning app
@@ -30,6 +30,7 @@ class SessionSerializer(serializers.ModelSerializer):
     completedTaskCount = serializers.IntegerField(source="completed_task_count")
     latestRecommendation = serializers.CharField(source="latest_recommendation")
     surveyDue = serializers.SerializerMethodField()
+    curriculumComplete = serializers.SerializerMethodField()
 
     class Meta:
         model = LearnerSession
@@ -42,10 +43,14 @@ class SessionSerializer(serializers.ModelSerializer):
             "completedTaskCount",
             "latestRecommendation",
             "surveyDue",
+            "curriculumComplete",
         ]
 
     def get_surveyDue(self, obj):
-        return obj.completed_task_count > 0 and obj.completed_task_count % 5 == 0
+        return obj.pending_survey_milestone() is not None
+
+    def get_curriculumComplete(self, obj):
+        return obj.completed_task_count >= len(TASK_BANK)
 
 # Serializer for task submission data
 class SubmissionSerializer(serializers.Serializer):
@@ -54,20 +59,35 @@ class SubmissionSerializer(serializers.Serializer):
     elapsedTimeSeconds = serializers.FloatField(min_value=0.1)
     assistanceInteractions = serializers.IntegerField(default=0, min_value=0)
     completionRatio = serializers.FloatField(default=1.0, min_value=0.0, max_value=1.0)
-    isCorrect = serializers.BooleanField(required=False, allow_null=True)
     selectedChoice = serializers.CharField(required=False, allow_blank=True)
     answerText = serializers.CharField(required=False, allow_blank=True)
     answerPayload = serializers.DictField(required=False)
 
     def validate(self, attrs):
+        if "isCorrect" in self.initial_data:
+            raise serializers.ValidationError(
+                {"isCorrect": "Correctness is derived by the backend and must not be supplied."}
+            )
         try:
-            attrs["session"] = LearnerSession.objects.get(token=attrs["sessionToken"])
+            attrs["session"] = LearnerSession.objects.select_for_update().get(
+                token=attrs["sessionToken"]
+            )
         except LearnerSession.DoesNotExist:
             raise serializers.ValidationError({"sessionToken": "Unknown session token."})
 
         task = get_task(attrs["taskId"])
         if task is None:
             raise serializers.ValidationError({"taskId": "Unknown task id."})
+        if task["id"] != attrs["session"].current_task_id:
+            raise serializers.ValidationError(
+                {"taskId": "Task is not the current backend-selected task for this session."}
+            )
+        if attrs["session"].submissions.filter(task_id=task["id"]).exists():
+            raise serializers.ValidationError({"taskId": "Task has already been completed."})
+        if task["type"] == "mcq" and not attrs.get("selectedChoice"):
+            raise serializers.ValidationError(
+                {"selectedChoice": "A selected choice is required for an MCQ task."}
+            )
         attrs["task"] = task
         return attrs
 
@@ -81,7 +101,159 @@ class MicroSurveySerializer(serializers.Serializer):
 
     def validate(self, attrs):
         try:
-            attrs["session"] = LearnerSession.objects.get(token=attrs["sessionToken"])
+            attrs["session"] = LearnerSession.objects.select_for_update().get(
+                token=attrs["sessionToken"]
+            )
         except LearnerSession.DoesNotExist:
             raise serializers.ValidationError({"sessionToken": "Unknown session token."})
+        milestone = attrs["session"].pending_survey_milestone()
+        if milestone is None:
+            raise serializers.ValidationError(
+                {"sessionToken": "No unanswered five-task survey is currently due."}
+            )
+        attrs["milestoneTaskCount"] = milestone
         return attrs
+
+
+# Explicit response serializers keep the generated OpenAPI contract useful to clients.
+class ErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField(required=False)
+    moduleId = serializers.CharField(required=False)
+    direction = serializers.CharField(required=False)
+
+
+class DifficultyCountsSerializer(serializers.Serializer):
+    foundation = serializers.IntegerField()
+    intermediate = serializers.IntegerField()
+    advanced = serializers.IntegerField()
+
+
+class ModuleResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    concepts = serializers.ListField(child=serializers.CharField())
+    score = serializers.FloatField()
+    aggregateScore = serializers.FloatField()
+    taskCount = serializers.IntegerField()
+    difficultyCounts = DifficultyCountsSerializer()
+
+
+class ModulesResponseSerializer(serializers.Serializer):
+    modules = ModuleResponseSerializer(many=True)
+
+
+class TaskResponseSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    moduleId = serializers.IntegerField()
+    type = serializers.CharField()
+    difficulty = serializers.ChoiceField(choices=("foundation", "intermediate", "advanced"))
+    difficultyLevel = serializers.IntegerField()
+    taskMetricWeight = serializers.FloatField()
+    estimatedCognitiveLoad = serializers.CharField()
+    baselineTimeSeconds = serializers.IntegerField()
+    prompt = serializers.CharField()
+    conceptTags = serializers.ListField(child=serializers.CharField())
+    adaptationSignals = serializers.DictField()
+    choices = serializers.ListField(child=serializers.CharField(), required=False)
+    starterCode = serializers.CharField(required=False, allow_blank=True)
+
+
+class TaskNavigationResponseSerializer(serializers.Serializer):
+    task = TaskResponseSerializer(allow_null=True)
+    position = serializers.IntegerField()
+    totalTasks = serializers.IntegerField()
+    hasPrevious = serializers.BooleanField()
+    hasNext = serializers.BooleanField()
+
+
+class TaskCatalogResponseSerializer(serializers.Serializer):
+    tasks = TaskResponseSerializer(many=True)
+    activeTask = TaskNavigationResponseSerializer()
+
+
+class SessionStateResponseSerializer(serializers.Serializer):
+    sessionToken = serializers.CharField()
+    currentModuleId = serializers.IntegerField()
+    currentTaskId = serializers.CharField()
+    aggregateMastery = serializers.FloatField()
+    aggregateFriction = serializers.FloatField()
+    completedTaskCount = serializers.IntegerField()
+    latestRecommendation = serializers.CharField()
+    surveyDue = serializers.BooleanField()
+    curriculumComplete = serializers.BooleanField()
+    currentTask = TaskResponseSerializer(allow_null=True)
+
+
+class CurrentSessionTaskResponseSerializer(serializers.Serializer):
+    task = TaskResponseSerializer(allow_null=True)
+    session = SessionStateResponseSerializer()
+
+
+class AdaptationSignalsResponseSerializer(serializers.Serializer):
+    knowledgeMastery = serializers.FloatField()
+    systemCognitiveFriction = serializers.FloatField()
+    recommendation = serializers.CharField()
+
+
+class AdaptationResponseSerializer(serializers.Serializer):
+    direction = serializers.CharField()
+    targetDifficultyLevel = serializers.IntegerField()
+    selectedDifficulty = serializers.CharField()
+    selectedScope = serializers.CharField()
+    curriculumComplete = serializers.BooleanField()
+    reason = serializers.CharField()
+    signals = AdaptationSignalsResponseSerializer()
+
+
+class SubmissionResponseSerializer(serializers.Serializer):
+    knowledgeMastery = serializers.FloatField()
+    systemCognitiveFriction = serializers.FloatField()
+    focusState = serializers.CharField()
+    recommendation = serializers.CharField()
+    supportMessage = serializers.CharField()
+    inputSnapshot = serializers.DictField()
+    engineTrace = serializers.DictField()
+    submissionId = serializers.IntegerField()
+    session = SessionStateResponseSerializer()
+    nextTask = TaskResponseSerializer()
+    adaptation = AdaptationResponseSerializer()
+    surveyDue = serializers.BooleanField()
+
+
+class MicroSurveyResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    sessionToken = serializers.CharField()
+    submissionId = serializers.IntegerField(allow_null=True)
+    satisfactionScore = serializers.IntegerField()
+    perceivedDifficulty = serializers.IntegerField()
+    confidenceScore = serializers.IntegerField()
+    milestoneTaskCount = serializers.IntegerField()
+    surveyDue = serializers.BooleanField()
+
+
+class TrainingDataRowSerializer(serializers.Serializer):
+    sessionToken = serializers.CharField()
+    taskId = serializers.CharField()
+    moduleId = serializers.IntegerField()
+    taskType = serializers.CharField()
+    difficulty = serializers.CharField()
+    difficultyLevel = serializers.IntegerField()
+    taskMetricWeight = serializers.FloatField()
+    historicalGradeAverage = serializers.FloatField(allow_null=True)
+    relativeResponseTime = serializers.FloatField()
+    assistanceInteractions = serializers.IntegerField()
+    completionRatio = serializers.FloatField()
+    isCorrect = serializers.BooleanField(allow_null=True)
+    knowledgeMastery = serializers.FloatField()
+    systemCognitiveFriction = serializers.FloatField()
+    focusState = serializers.CharField()
+    recommendation = serializers.CharField()
+    satisfactionScore = serializers.IntegerField(allow_null=True)
+    perceivedDifficulty = serializers.IntegerField(allow_null=True)
+    confidenceScore = serializers.IntegerField(allow_null=True)
+    createdAt = serializers.DateTimeField()
+
+
+class TrainingDataExportResponseSerializer(serializers.Serializer):
+    rows = TrainingDataRowSerializer(many=True)
+    count = serializers.IntegerField()

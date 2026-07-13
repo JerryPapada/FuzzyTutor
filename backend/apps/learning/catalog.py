@@ -345,6 +345,17 @@ TASK_BANK = [
 ]
 
 
+def public_task_payload(task):
+    """Return task data safe to expose before a learner submits an answer."""
+    if task is None:
+        return None
+    return {
+        key: value
+        for key, value in task.items()
+        if key not in {"correctChoice", "answerGuide"}
+    }
+
+
 def module_task_counts():
     counts = {module["id"]: 0 for module in CURRICULUM_MODULES}
     for task in TASK_BANK:
@@ -391,8 +402,16 @@ def tasks_for_module(module_id):
 
 def active_task_payload(index, module_id=None):
     tasks = tasks_for_module(module_id)
+    if not tasks:
+        return {
+            "task": None,
+            "position": 0,
+            "totalTasks": 0,
+            "hasPrevious": False,
+            "hasNext": False,
+        }
     safe_index = max(0, min(len(tasks) - 1, index))
-    task = tasks[safe_index]
+    task = public_task_payload(tasks[safe_index])
     return {
         "task": task,
         "position": safe_index,

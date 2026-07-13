@@ -100,6 +100,7 @@ class Command(BaseCommand):
                 satisfaction_score=max(1, min(5, row["confidenceScore"])),
                 perceived_difficulty=max(1, min(5, row["perceivedDifficulty"])),
                 confidence_score=max(1, min(5, row["confidenceScore"])),
+                milestone_task_count=0,
                 comment="Synthetic bootstrap ANFIS training row.",
             )
             created += 1

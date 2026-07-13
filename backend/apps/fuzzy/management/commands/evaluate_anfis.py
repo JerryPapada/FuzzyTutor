@@ -5,6 +5,7 @@ from apps.fuzzy.engines.anfis_training import (
     load_trained_parameters,
     predict_sample_mastery,
     regression_metrics,
+    split_training_samples,
 )
 from apps.fuzzy.management.commands.train_anfis import _sample_from_log
 from apps.learning.models import FuzzyEvaluationLog
@@ -48,14 +49,23 @@ class Command(BaseCommand):
                 f"Need at least {options['min_samples']} samples to evaluate; found {len(samples)}."
             )
 
-        targets = [sample["targetMastery"] for sample in samples]
+        metadata = parameters.get("metadata") or {}
+        _training_samples, evaluation_samples = split_training_samples(
+            samples,
+            validation_fraction=metadata.get("validationFraction", 0.2),
+            seed=metadata.get("splitSeed", 42),
+        )
+        if not evaluation_samples:
+            evaluation_samples = samples
+
+        targets = [sample["targetMastery"] for sample in evaluation_samples]
         trained_predictions = [
             predict_sample_mastery(sample, parameters["consequentWeights"])
-            for sample in samples
+            for sample in evaluation_samples
         ]
         baseline_predictions = [
             predict_sample_mastery(sample, DEFAULT_CONSEQUENT_WEIGHTS)
-            for sample in samples
+            for sample in evaluation_samples
         ]
 
         trained_metrics = regression_metrics(targets, trained_predictions)
@@ -65,7 +75,6 @@ class Command(BaseCommand):
         self.stdout.write(_format_metrics("Default ANFIS baseline", baseline_metrics))
         self.stdout.write(_format_metrics("Trained ANFIS", trained_metrics))
         self.stdout.write(f"RMSE improvement: {improvement:.3f}")
-        metadata = parameters.get("metadata") or {}
         if metadata:
             self.stdout.write(
                 "Training metadata: "

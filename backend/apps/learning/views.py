@@ -1,5 +1,6 @@
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, PolymorphicProxySerializer, extend_schema
+from django.db import transaction
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -13,16 +14,31 @@ from .catalog import (
     get_task,
     module_task_counts,
     module_task_counts_by_difficulty,
+    public_task_payload,
     task_index,
     tasks_for_module,
 )
 from .models import FuzzyEvaluationLog, LearnerSession, MicroSurveyResponse, TaskSubmission
-from .serializers import MicroSurveySerializer, SessionCreateSerializer, SessionSerializer, SubmissionSerializer
+from .serializers import (
+    CurrentSessionTaskResponseSerializer,
+    ErrorResponseSerializer,
+    MicroSurveyResponseSerializer,
+    MicroSurveySerializer,
+    ModulesResponseSerializer,
+    SessionCreateSerializer,
+    SessionSerializer,
+    SessionStateResponseSerializer,
+    SubmissionResponseSerializer,
+    SubmissionSerializer,
+    TaskCatalogResponseSerializer,
+    TaskNavigationResponseSerializer,
+    TrainingDataExportResponseSerializer,
+)
 
 # Helper functions for serializing session and submission data
 def _session_payload(session):
     payload = SessionSerializer(session).data
-    payload["currentTask"] = get_task(session.current_task_id)
+    payload["currentTask"] = public_task_payload(get_task(session.current_task_id))
     return payload
 
 
@@ -36,24 +52,39 @@ def _answer_payload(validated):
 
 
 def _correctness_signal(task, validated):
-    if "isCorrect" in validated and validated["isCorrect"] is not None:
-        return validated["isCorrect"]
     if task["type"] == "mcq" and validated.get("selectedChoice"):
         return validated["selectedChoice"] == task.get("correctChoice")
-    if task["type"] == "code":
-        return validated["completionRatio"] > 0
     return None
 
 
 def _survey_due(session):
-    return session.completed_task_count > 0 and session.completed_task_count % 5 == 0
+    return session.pending_survey_milestone() is not None
+
+
+def _module_id_or_error(raw_module_id):
+    if raw_module_id in (None, ""):
+        return None, None
+    try:
+        module_id = int(raw_module_id)
+    except (TypeError, ValueError):
+        return None, Response(
+            {"moduleId": "Module id must be an integer."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    valid_ids = {module["id"] for module in CURRICULUM_MODULES}
+    if module_id not in valid_ids:
+        return None, Response(
+            {"moduleId": "Unknown module id."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return module_id, None
 
 
 @extend_schema(
     tags=["learning"],
     summary="List curriculum modules",
     description="Returns the seven programming modules with task totals and difficulty distribution.",
-    responses={200: OpenApiTypes.OBJECT},
+    responses={200: ModulesResponseSerializer},
 )
 @api_view(["GET"])
 def modules(request):
@@ -85,14 +116,16 @@ def modules(request):
         OpenApiParameter("taskId", OpenApiTypes.STR, OpenApiParameter.QUERY),
         OpenApiParameter("moduleId", OpenApiTypes.INT, OpenApiParameter.QUERY),
     ],
-    responses={200: OpenApiTypes.OBJECT},
+    responses={200: TaskCatalogResponseSerializer, 400: ErrorResponseSerializer},
 )
 @api_view(["GET"])
 def tasks(request):
     index = request.query_params.get("index")
     task_id = request.query_params.get("taskId")
     module_id = request.query_params.get("moduleId")
-    module_id = int(module_id) if module_id else None
+    module_id, error_response = _module_id_or_error(module_id)
+    if error_response:
+        return error_response
 
     try:
         selected_index = int(index) if index is not None else task_index(task_id, module_id)
@@ -101,7 +134,7 @@ def tasks(request):
 
     return Response(
         {
-            "tasks": tasks_for_module(module_id),
+            "tasks": [public_task_payload(task) for task in tasks_for_module(module_id)],
             "activeTask": active_task_payload(selected_index, module_id),
         }
     )
@@ -120,7 +153,15 @@ def tasks(request):
         OpenApiParameter("direction", OpenApiTypes.STR, OpenApiParameter.QUERY),
         OpenApiParameter("sessionToken", OpenApiTypes.STR, OpenApiParameter.QUERY),
     ],
-    responses={200: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: PolymorphicProxySerializer(
+            component_name="NextTaskResponse",
+            serializers=[TaskNavigationResponseSerializer, CurrentSessionTaskResponseSerializer],
+            resource_type_field_name=None,
+        ),
+        400: ErrorResponseSerializer,
+        404: ErrorResponseSerializer,
+    },
 )
 @api_view(["GET"])
 def next_task(request):
@@ -134,9 +175,21 @@ def next_task(request):
             session = LearnerSession.objects.get(token=session_token)
         except LearnerSession.DoesNotExist:
             return Response({"detail": "Unknown session token."}, status=status.HTTP_404_NOT_FOUND)
-        return Response({"task": get_task(session.current_task_id), "session": _session_payload(session)})
+        return Response(
+            {
+                "task": public_task_payload(get_task(session.current_task_id)),
+                "session": _session_payload(session),
+            }
+        )
 
-    module_id = int(module_id) if module_id else None
+    module_id, error_response = _module_id_or_error(module_id)
+    if error_response:
+        return error_response
+    if direction not in {"forward", "backward"}:
+        return Response(
+            {"direction": "Direction must be 'forward' or 'backward'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     current_index = task_index(task_id, module_id)
     current_index = current_index - 1 if direction == "backward" else current_index + 1
     return Response(active_task_payload(current_index, module_id))
@@ -146,7 +199,7 @@ def next_task(request):
     tags=["learning"],
     summary="Create anonymous learner session",
     request=SessionCreateSerializer,
-    responses={201: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
+    responses={201: SessionStateResponseSerializer, 400: ErrorResponseSerializer},
 )
 @api_view(["POST"])
 def sessions(request):
@@ -169,7 +222,7 @@ def sessions(request):
     parameters=[
         OpenApiParameter("session_token", OpenApiTypes.STR, OpenApiParameter.PATH),
     ],
-    responses={200: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={200: SessionStateResponseSerializer, 404: ErrorResponseSerializer},
 )
 @api_view(["GET"])
 def session_detail(request, session_token):
@@ -189,9 +242,10 @@ def session_detail(request, session_token):
         "returns the next adapted task."
     ),
     request=SubmissionSerializer,
-    responses={201: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
+    responses={201: SubmissionResponseSerializer, 400: ErrorResponseSerializer},
 )
 @api_view(["POST"])
+@transaction.atomic
 def submissions(request):
     serializer = SubmissionSerializer(data=request.data)
     if not serializer.is_valid():
@@ -256,7 +310,7 @@ def submissions(request):
             **fuzzy_result,
             "submissionId": submission.id,
             "session": _session_payload(session),
-            "nextTask": adaptation_result["nextTask"],
+            "nextTask": public_task_payload(adaptation_result["nextTask"]),
             "adaptation": adaptation_result["adaptation"],
             "surveyDue": _survey_due(session),
         },
@@ -269,9 +323,10 @@ def submissions(request):
     summary="Store a learner micro-survey",
     description="Stores satisfaction, perceived difficulty, and confidence labels for model analysis.",
     request=MicroSurveySerializer,
-    responses={201: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
+    responses={201: MicroSurveyResponseSerializer, 400: ErrorResponseSerializer},
 )
 @api_view(["POST"])
+@transaction.atomic
 def micro_surveys(request):
     serializer = MicroSurveySerializer(data=request.data)
     if not serializer.is_valid():
@@ -285,6 +340,7 @@ def micro_surveys(request):
         satisfaction_score=serializer.validated_data["satisfactionScore"],
         perceived_difficulty=serializer.validated_data["perceivedDifficulty"],
         confidence_score=serializer.validated_data["confidenceScore"],
+        milestone_task_count=serializer.validated_data["milestoneTaskCount"],
         comment=serializer.validated_data.get("comment", ""),
     )
     return Response(
@@ -295,6 +351,8 @@ def micro_surveys(request):
             "satisfactionScore": survey.satisfaction_score,
             "perceivedDifficulty": survey.perceived_difficulty,
             "confidenceScore": survey.confidence_score,
+            "milestoneTaskCount": survey.milestone_task_count,
+            "surveyDue": _survey_due(session),
         },
         status=status.HTTP_201_CREATED,
     )
@@ -307,7 +365,7 @@ def micro_surveys(request):
         "Exports telemetry rows that can be used to evaluate or retrain the ANFIS model, "
         "including task metadata, timing, assistance, completion, model outputs, and survey labels."
     ),
-    responses={200: OpenApiTypes.OBJECT},
+    responses={200: TrainingDataExportResponseSerializer},
 )
 @api_view(["GET"])
 def training_data_export(request):
