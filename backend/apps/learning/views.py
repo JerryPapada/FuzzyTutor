@@ -36,13 +36,13 @@ from .serializers import (
 )
 
 # Helper functions for serializing session and submission data
-def _session_payload(session):
+def session_payload(session):
     payload = SessionSerializer(session).data
     payload["currentTask"] = public_task_payload(get_task(session.current_task_id))
     return payload
 
 
-def _answer_payload(validated):
+def answer_payload(validated):
     payload = dict(validated.get("answerPayload") or {})
     if "selectedChoice" in validated:
         payload["selectedChoice"] = validated["selectedChoice"]
@@ -51,17 +51,17 @@ def _answer_payload(validated):
     return payload
 
 
-def _correctness_signal(task, validated):
+def correctness_signal(task, validated):
     if task["type"] == "mcq" and validated.get("selectedChoice"):
         return validated["selectedChoice"] == task.get("correctChoice")
     return None
 
 
-def _survey_due(session):
+def survey_due(session):
     return session.pending_survey_milestone() is not None
 
 
-def _module_id_or_error(raw_module_id):
+def module_id_or_error(raw_module_id):
     if raw_module_id in (None, ""):
         return None, None
     try:
@@ -123,7 +123,7 @@ def tasks(request):
     index = request.query_params.get("index")
     task_id = request.query_params.get("taskId")
     module_id = request.query_params.get("moduleId")
-    module_id, error_response = _module_id_or_error(module_id)
+    module_id, error_response = module_id_or_error(module_id)
     if error_response:
         return error_response
 
@@ -178,11 +178,11 @@ def next_task(request):
         return Response(
             {
                 "task": public_task_payload(get_task(session.current_task_id)),
-                "session": _session_payload(session),
+                "session": session_payload(session),
             }
         )
 
-    module_id, error_response = _module_id_or_error(module_id)
+    module_id, error_response = module_id_or_error(module_id)
     if error_response:
         return error_response
     if direction not in {"forward", "backward"}:
@@ -213,7 +213,7 @@ def sessions(request):
         current_module_id=task["moduleId"],
         current_task_id=task["id"],
     )
-    return Response(_session_payload(session), status=status.HTTP_201_CREATED)
+    return Response(session_payload(session), status=status.HTTP_201_CREATED)
 
 
 @extend_schema(
@@ -230,7 +230,7 @@ def session_detail(request, session_token):
         session = LearnerSession.objects.get(token=session_token)
     except LearnerSession.DoesNotExist:
         return Response({"detail": "Unknown session token."}, status=status.HTTP_404_NOT_FOUND)
-    return Response(_session_payload(session))
+    return Response(session_payload(session))
 
 
 @extend_schema(
@@ -256,7 +256,7 @@ def submissions(request):
     task = data["task"]
     elapsed = data["elapsedTimeSeconds"]
     relative_time = elapsed / max(1, task["baselineTimeSeconds"])
-    is_correct = _correctness_signal(task, data)
+    is_correct = correctness_signal(task, data)
 
     fuzzy_inputs = {
         "taskMetricWeight": task["taskMetricWeight"],
@@ -283,7 +283,7 @@ def submissions(request):
         assistance_interactions=data["assistanceInteractions"],
         completion_ratio=data["completionRatio"],
         is_correct=is_correct,
-        answer_payload=_answer_payload(data),
+        answer_payload=answer_payload(data),
     )
     FuzzyEvaluationLog.objects.create(
         session=session,
@@ -309,10 +309,10 @@ def submissions(request):
         {
             **fuzzy_result,
             "submissionId": submission.id,
-            "session": _session_payload(session),
+            "session": session_payload(session),
             "nextTask": public_task_payload(adaptation_result["nextTask"]),
             "adaptation": adaptation_result["adaptation"],
-            "surveyDue": _survey_due(session),
+            "surveyDue": survey_due(session),
         },
         status=status.HTTP_201_CREATED,
     )
@@ -352,7 +352,7 @@ def micro_surveys(request):
             "perceivedDifficulty": survey.perceived_difficulty,
             "confidenceScore": survey.confidence_score,
             "milestoneTaskCount": survey.milestone_task_count,
-            "surveyDue": _survey_due(session),
+            "surveyDue": survey_due(session),
         },
         status=status.HTTP_201_CREATED,
     )

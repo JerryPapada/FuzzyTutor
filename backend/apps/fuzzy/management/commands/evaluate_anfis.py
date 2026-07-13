@@ -7,11 +7,11 @@ from apps.fuzzy.engines.anfis_training import (
     regression_metrics,
     split_training_samples,
 )
-from apps.fuzzy.management.commands.train_anfis import _sample_from_log
+from apps.fuzzy.management.commands.train_anfis import sample_from_log
 from apps.learning.models import FuzzyEvaluationLog
 
 
-def _format_metrics(label, metrics):
+def format_metrics(label, metrics):
     return (
         f"{label}: samples={metrics['count']} "
         f"MAE={metrics['mae']:.3f} "
@@ -43,7 +43,7 @@ class Command(BaseCommand):
         if options["include_real_only"]:
             logs = logs.exclude(session__token__startswith="synthetic-anfis-")
 
-        samples = [_sample_from_log(log) for log in logs]
+        samples = [sample_from_log(log) for log in logs]
         if len(samples) < options["min_samples"]:
             raise CommandError(
                 f"Need at least {options['min_samples']} samples to evaluate; found {len(samples)}."
@@ -72,8 +72,8 @@ class Command(BaseCommand):
         baseline_metrics = regression_metrics(targets, baseline_predictions)
         improvement = baseline_metrics["rmse"] - trained_metrics["rmse"]
 
-        self.stdout.write(_format_metrics("Default ANFIS baseline", baseline_metrics))
-        self.stdout.write(_format_metrics("Trained ANFIS", trained_metrics))
+        self.stdout.write(format_metrics("Default ANFIS baseline", baseline_metrics))
+        self.stdout.write(format_metrics("Trained ANFIS", trained_metrics))
         self.stdout.write(f"RMSE improvement: {improvement:.3f}")
         if metadata:
             self.stdout.write(

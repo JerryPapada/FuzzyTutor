@@ -6,7 +6,7 @@ from .anfis_training import (
 )
 from .utils import clamp, left_shoulder, right_shoulder, triangular, weighted_average
 
-def _correctness_signal(is_correct, completion_ratio):
+def correctness_signal(is_correct, completion_ratio):
     if is_correct is True:
         return 100.0
     if is_correct is False:
@@ -14,7 +14,7 @@ def _correctness_signal(is_correct, completion_ratio):
     return 45.0 + (completion_ratio * 35.0)
 
 # Compute membership values for each linguistic variable
-def _memberships(task_weight, historical_grade, completion_ratio, correctness_score):
+def memberships(task_weight, historical_grade, completion_ratio, correctness_score):
     return {
         "challenge": {
             "foundation": left_shoulder(task_weight, 35.0, 60.0),
@@ -46,17 +46,17 @@ def predict_mastery(
     task_type,
     is_correct=None,
 ):
-    correctness_score = _correctness_signal(is_correct, completion_ratio)
-    memberships = _memberships(
+    correctness_score = correctness_signal(is_correct, completion_ratio)
+    membership_values = memberships(
         task_weight,
         historical_grade,
         completion_ratio,
         correctness_score,
     )
-    history = memberships["history"]
-    completion = memberships["completion"]
-    correctness = memberships["correctness"]
-    challenge = memberships["challenge"]
+    history = membership_values["history"]
+    completion = membership_values["completion"]
+    correctness = membership_values["correctness"]
+    challenge = membership_values["challenge"]
 
     trained_parameters = load_trained_parameters()
     consequent_weights = (
@@ -126,7 +126,7 @@ def predict_mastery(
 
     return {
         "score": clamp(mastery),
-        "memberships": memberships,
+        "memberships": membership_values,
         "rules": active_rules,
         "correctnessSignal": round(correctness_score, 2),
         "contributionWeights": consequent_weights,

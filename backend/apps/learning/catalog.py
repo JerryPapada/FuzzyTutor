@@ -70,7 +70,7 @@ CURRICULUM_MODULES = [
 ]
 
 
-def _task(
+def task_definition(
     task_id,
     module_id,
     task_type,
@@ -111,7 +111,7 @@ def _task(
 
 
 TASK_BANK = [
-    _task(
+    task_definition(
         "lists-mcq-001",
         1,
         "mcq",
@@ -122,7 +122,7 @@ TASK_BANK = [
         ["Adds an item to the end", "Deletes the last item", "Sorts the list", "Creates a new tuple"],
         "Adds an item to the end",
     ),
-    _task(
+    task_definition(
         "lists-code-001",
         1,
         "code",
@@ -133,7 +133,7 @@ TASK_BANK = [
         starter_code="evens = []\n",
         answer_guide="Use a list literal or build it with a loop/comprehension.",
     ),
-    _task(
+    task_definition(
         "lists-code-002",
         1,
         "code",
@@ -144,7 +144,7 @@ TASK_BANK = [
         starter_code="squares = []\n",
         answer_guide="A loop or list comprehension can produce [1, 4, 9, 16, 25].",
     ),
-    _task(
+    task_definition(
         "arrays-mcq-001",
         2,
         "mcq",
@@ -155,7 +155,7 @@ TASK_BANK = [
         ["They use contiguous memory", "They always sort data", "They avoid indexes", "They duplicate values"],
         "They use contiguous memory",
     ),
-    _task(
+    task_definition(
         "arrays-code-001",
         2,
         "code",
@@ -166,7 +166,7 @@ TASK_BANK = [
         starter_code="values = []\n",
         answer_guide="Use values[0] after creating the list.",
     ),
-    _task(
+    task_definition(
         "arrays-mcq-002",
         2,
         "mcq",
@@ -177,7 +177,7 @@ TASK_BANK = [
         ["Inserting at the front", "Reading by index", "Checking length", "Reading the last value"],
         "Inserting at the front",
     ),
-    _task(
+    task_definition(
         "dicts-mcq-001",
         3,
         "mcq",
@@ -188,7 +188,7 @@ TASK_BANK = [
         ["Store key-value pairs", "Only store integers", "Build inheritance trees", "Measure execution time"],
         "Store key-value pairs",
     ),
-    _task(
+    task_definition(
         "dicts-code-001",
         3,
         "code",
@@ -199,7 +199,7 @@ TASK_BANK = [
         starter_code="student = {}\nresult = ''\n",
         answer_guide="Use student['name'] or student.get('name').",
     ),
-    _task(
+    task_definition(
         "dicts-code-002",
         3,
         "code",
@@ -210,7 +210,7 @@ TASK_BANK = [
         starter_code="words = ['a', 'b', 'a']\ncounts = {}\n",
         answer_guide="Loop over words and increment counts[word].",
     ),
-    _task(
+    task_definition(
         "classes-mcq-001",
         4,
         "mcq",
@@ -221,7 +221,7 @@ TASK_BANK = [
         ["Initializes object state", "Deletes the object", "Imports the module", "Creates a loop"],
         "Initializes object state",
     ),
-    _task(
+    task_definition(
         "classes-code-001",
         4,
         "code",
@@ -232,7 +232,7 @@ TASK_BANK = [
         starter_code="class Person:\n    pass\n",
         answer_guide="Define __init__(self, name) and assign self.name = name.",
     ),
-    _task(
+    task_definition(
         "classes-code-002",
         4,
         "code",
@@ -243,7 +243,7 @@ TASK_BANK = [
         starter_code="class Person:\n    def __init__(self, name):\n        self.name = name\n",
         answer_guide="Define greet(self) and return a string using self.name.",
     ),
-    _task(
+    task_definition(
         "inheritance-mcq-001",
         5,
         "mcq",
@@ -254,7 +254,7 @@ TASK_BANK = [
         ["A class based on another class", "A loop inside a class", "A dictionary key", "A syntax error"],
         "A class based on another class",
     ),
-    _task(
+    task_definition(
         "inheritance-mcq-002",
         5,
         "mcq",
@@ -265,7 +265,7 @@ TASK_BANK = [
         ["Overriding", "Indexing", "Hashing", "Slicing"],
         "Overriding",
     ),
-    _task(
+    task_definition(
         "inheritance-code-001",
         5,
         "code",
@@ -276,7 +276,7 @@ TASK_BANK = [
         starter_code="class Animal:\n    def speak(self):\n        return 'sound'\n",
         answer_guide="Define class Dog(Animal) and override speak.",
     ),
-    _task(
+    task_definition(
         "exceptions-mcq-001",
         6,
         "mcq",
@@ -287,7 +287,7 @@ TASK_BANK = [
         ["finally", "if", "else", "break"],
         "finally",
     ),
-    _task(
+    task_definition(
         "exceptions-code-001",
         6,
         "code",
@@ -298,7 +298,7 @@ TASK_BANK = [
         starter_code="def read_name(path):\n    pass\n",
         answer_guide="Catch the error and return the fallback string.",
     ),
-    _task(
+    task_definition(
         "exceptions-code-002",
         6,
         "code",
@@ -309,7 +309,7 @@ TASK_BANK = [
         starter_code="def validate_age(age):\n    pass\n",
         answer_guide="Use if age < 0: raise ValueError(...).",
     ),
-    _task(
+    task_definition(
         "control-mcq-001",
         7,
         "mcq",
@@ -320,7 +320,7 @@ TASK_BANK = [
         ["if", "loop", "def", "return"],
         "if",
     ),
-    _task(
+    task_definition(
         "control-code-001",
         7,
         "code",
@@ -331,7 +331,7 @@ TASK_BANK = [
         starter_code="",
         answer_guide="Use range(1, 4).",
     ),
-    _task(
+    task_definition(
         "control-code-002",
         7,
         "code",

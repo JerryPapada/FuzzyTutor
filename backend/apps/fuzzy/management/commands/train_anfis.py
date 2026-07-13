@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.fuzzy.engines.anfis import _correctness_signal, _memberships
+from apps.fuzzy.engines.anfis import correctness_signal, memberships
 from apps.fuzzy.engines.anfis_training import (
     feature_vector,
     predict_sample_mastery,
@@ -13,11 +13,11 @@ from apps.fuzzy.engines.anfis_training import (
 from apps.learning.models import FuzzyEvaluationLog
 
 
-def _rule_strengths(memberships):
-    history = memberships["history"]
-    completion = memberships["completion"]
-    correctness = memberships["correctness"]
-    challenge = memberships["challenge"]
+def rule_strengths(membership_values):
+    history = membership_values["history"]
+    completion = membership_values["completion"]
+    correctness = membership_values["correctness"]
+    challenge = membership_values["challenge"]
     return {
         "secure_prior_mastery": min(history["high"], completion["high"], correctness["strong"]),
         "developing_mastery": max(
@@ -36,7 +36,7 @@ def _rule_strengths(memberships):
     }
 
 
-def _target_for(log, survey):
+def target_for(log, survey):
     stored_target = log.submission.answer_payload.get("targetMastery")
     if stored_target is not None:
         return float(stored_target)
@@ -51,12 +51,12 @@ def _target_for(log, survey):
     return synthetic_target_mastery(row)
 
 
-def _sample_from_log(log):
+def sample_from_log(log):
     submission = log.submission
     survey = submission.micro_surveys.order_by("-created_at").first()
     historical_grade = log.input_snapshot.get("historicalGradeAverage", 70.0)
-    correctness_score = _correctness_signal(submission.is_correct, submission.completion_ratio)
-    memberships = _memberships(
+    correctness_score = correctness_signal(submission.is_correct, submission.completion_ratio)
+    membership_values = memberships(
         submission.task_metric_weight,
         historical_grade,
         submission.completion_ratio,
@@ -70,8 +70,8 @@ def _sample_from_log(log):
             correctness_score,
             submission.task_type,
         ),
-        "ruleStrengths": _rule_strengths(memberships),
-        "targetMastery": _target_for(log, survey),
+        "ruleStrengths": rule_strengths(membership_values),
+        "targetMastery": target_for(log, survey),
     }
 
 
@@ -98,7 +98,7 @@ class Command(BaseCommand):
         if options["include_real_only"]:
             logs = logs.exclude(session__token__startswith="synthetic-anfis-")
 
-        samples = [_sample_from_log(log) for log in logs]
+        samples = [sample_from_log(log) for log in logs]
         if len(samples) < options["min_samples"]:
             raise CommandError(
                 f"Need at least {options['min_samples']} samples to train; found {len(samples)}."

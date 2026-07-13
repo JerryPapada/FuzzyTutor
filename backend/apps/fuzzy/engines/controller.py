@@ -13,22 +13,25 @@ FOCUS_THRESHOLDS = {
 
 # Determine the focus state based on cognitive friction and mastery
 def focus_state_for(friction, mastery):
-    if (
-        friction < FOCUS_THRESHOLDS["steady_friction_max"]
+    # If the student has low cognitive friction and high mastery, they are focused and steady.
+    if (friction < FOCUS_THRESHOLDS["steady_friction_max"]
         and mastery >= FOCUS_THRESHOLDS["steady_mastery_min"]
     ):
         return "Focused & Steady"
+    # If the student has high cognitive friction, they may need support or be frustrated.
     if friction < FOCUS_THRESHOLDS["support_friction_max"]:
         return "Needs Support"
     return "Frustrated"
 
 # Determine the recommendation based on mastery and cognitive friction
 def recommendation_for(mastery, friction):
+    # If the student has high mastery and low cognitive friction, recommend increasing or holding the current tier.
     if (
         mastery >= FOCUS_THRESHOLDS["high_mastery_min"]
         and friction < 35.0
     ):
         return "increase_or_hold_high_tier"
+    # If the student has low mastery and high cognitive friction, recommend reducing difficulty and showing support.
     if (
         mastery < FOCUS_THRESHOLDS["low_mastery_max"]
         and friction >= FOCUS_THRESHOLDS["support_friction_max"]

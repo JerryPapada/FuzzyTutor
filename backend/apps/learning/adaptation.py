@@ -1,7 +1,7 @@
 from .catalog import CURRICULUM_MODULES, get_task, tasks_for_module
 
 # Find the task closest to the target difficulty level
-def _nearest_task(candidates, target_level, current_task_id):
+def nearest_task(candidates, target_level, current_task_id):
     ordered = sorted(
         candidates,
         key=lambda task: (
@@ -43,7 +43,7 @@ def select_next_task(session, current_task, fuzzy_result):
         if task["id"] not in completed_task_ids
         and task["difficultyLevel"] == target_level
     ]
-    next_task = _nearest_task(same_module_candidates, target_level, current_task["id"])
+    next_task = nearest_task(same_module_candidates, target_level, current_task["id"])
     scope = "module"
 
     # Edge case of no available or properly reccomended task
@@ -51,7 +51,7 @@ def select_next_task(session, current_task, fuzzy_result):
         wider_module_candidates = [
             task for task in module_tasks if task["id"] not in completed_task_ids
         ]
-        next_task = _nearest_task(wider_module_candidates, target_level, current_task["id"])
+        next_task = nearest_task(wider_module_candidates, target_level, current_task["id"])
 
     if next_task is None:
         module_ids = [module["id"] for module in CURRICULUM_MODULES]
@@ -64,7 +64,7 @@ def select_next_task(session, current_task, fuzzy_result):
                 if task["id"] not in completed_task_ids
             ]
             if candidates:
-                next_task = _nearest_task(candidates, target_level, current_task["id"])
+                next_task = nearest_task(candidates, target_level, current_task["id"])
                 scope = "next_module"
                 break
 

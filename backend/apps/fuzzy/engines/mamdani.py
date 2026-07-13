@@ -8,8 +8,8 @@ OUTPUT_SETS = {
     "severe": {"shape": "right_shoulder", "parameters": [72.0, 92.0]},
 }
 
-
-def _output_membership(consequent, value):
+# Compute the membership value for a given output set and value
+def output_membership(consequent, value):
     output_set = OUTPUT_SETS[consequent]
     parameters = output_set["parameters"]
     if output_set["shape"] == "left_shoulder":
@@ -18,15 +18,15 @@ def _output_membership(consequent, value):
         return right_shoulder(value, *parameters)
     return triangular(value, *parameters)
 
-
-def _centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0):
+# Compute the centroid of the aggregated output area for defuzzification
+def centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0):
     """Clip consequent sets, aggregate them with max, and calculate area centroid."""
     universe = [index * resolution for index in range(int(100 / resolution) + 1)]
     aggregated = []
     for value in universe:
         membership = max(
             (
-                min(rule["strength"], _output_membership(rule["consequent"], value))
+                min(rule["strength"], output_membership(rule["consequent"], value))
                 for rule in active_rules
             ),
             default=0.0,
@@ -40,7 +40,7 @@ def _centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0)
     return centroid, denominator * resolution
 
 # Compute membership values for each linguistic variable
-def _memberships(relative_response_time, assistance_interactions, completion_ratio):
+def memberships(relative_response_time, assistance_interactions, completion_ratio):
     time_pressure = {
         "low": left_shoulder(relative_response_time, 0.45, 0.95),
         "normal": triangular(relative_response_time, 0.65, 1.0, 1.45),
@@ -69,16 +69,17 @@ def infer_cognitive_friction(
     completion_ratio,
     task_type,
 ):
-    memberships = _memberships(
+    # Compute membership values for the input variables
+    membership_values = memberships(
         relative_response_time,
         assistance_interactions,
         completion_ratio,
     )
-    time_pressure = memberships["timePressure"]
-    assistance = memberships["assistance"]
-    completion = memberships["completion"]
+    time_pressure = membership_values["timePressure"]
+    assistance = membership_values["assistance"]
+    completion = membership_values["completion"]
     is_code_task = str(task_type).lower() == "code"
-
+    # Define the fuzzy rules and their corresponding outputs based on the memberships
     rule_specs = [
         (
             "steady_complete",
@@ -131,14 +132,14 @@ def infer_cognitive_friction(
         if strength > 0
     ]
 
-    friction, aggregated_area = _centroid_of_aggregated_output(
+    friction, aggregated_area = centroid_of_aggregated_output(
         active_rules,
         fallback=42.0 if is_code_task else 25.0,
     )
 
     return {
         "score": clamp(friction),
-        "memberships": memberships,
+        "memberships": membership_values,
         "rules": active_rules,
         "outputSets": OUTPUT_SETS,
         "aggregatedArea": round(aggregated_area, 4),

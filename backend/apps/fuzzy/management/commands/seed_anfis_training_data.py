@@ -8,7 +8,7 @@ from apps.learning.catalog import TASK_BANK
 from apps.learning.models import FuzzyEvaluationLog, LearnerSession, MicroSurveyResponse, TaskSubmission
 
 
-def _task_for_row(row, index):
+def task_for_row(row, index):
     candidates = [
         task
         for task in TASK_BANK
@@ -43,7 +43,7 @@ class Command(BaseCommand):
         )
         created = 0
         for index, row in enumerate(rows):
-            task = _task_for_row(row, index)
+            task = task_for_row(row, index)
             session = LearnerSession.objects.create(
                 token=f"synthetic-anfis-{uuid.uuid4().hex}",
                 current_module_id=task["moduleId"],
