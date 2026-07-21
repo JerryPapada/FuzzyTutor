@@ -1,0 +1,46 @@
+:root {
+  color: #17212b;
+  background:
+    radial-gradient(circle at top left, rgb(20 75 98 / 22%), transparent 34%),
+    radial-gradient(circle at top right, rgb(49 107 74 / 16%), transparent 28%),
+    linear-gradient(180deg, #f4f7f9 0%, #edf2f6 100%);
+  font-family:
+    "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2.1rem, 7vw, 4.3rem);
+  line-height: 0.95;
+}
