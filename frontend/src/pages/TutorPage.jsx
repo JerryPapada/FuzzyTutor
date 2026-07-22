@@ -29,6 +29,7 @@ function TutorPage() {
   const [evaluation, setEvaluation] = useState(null);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [codeAnswer, setCodeAnswer] = useState("");
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const activeModule = useMemo(
     () => modules.find((module) => module.id === activeModuleId) ?? null,
@@ -80,6 +81,20 @@ function TutorPage() {
     setEvaluation(null);
   }
 
+  function triggerTaskChange(changeCallback) {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      changeCallback();
+      setIsTransitioning(false);
+    }, 200); // Matches CSS transition duration
+  }
+
+  function goBack() {
+    triggerTaskChange(() => {
+      moveTask("back");
+    });
+  }
+
   function moveTask(direction) {
     if (activeModuleId == null || moduleTasks.length === 0) {
       return;
@@ -94,6 +109,45 @@ function TutorPage() {
         ...current,
         [activeModuleId]: boundedIndex,
       };
+    });
+  }
+
+  function advanceToNextTask() {
+    if (activeModuleId == null || moduleTasks.length === 0) {
+      return;
+    }
+
+    if (activeTaskIndex < moduleTasks.length - 1) {
+      setTaskIndexByModule((current) => ({
+        ...current,
+        [activeModuleId]: activeTaskIndex + 1,
+      }));
+    } else {
+      const currentModuleIdx = modules.findIndex((m) => m.id === activeModuleId);
+      if (currentModuleIdx !== -1 && currentModuleIdx < modules.length - 1) {
+        const nextModule = modules[currentModuleIdx + 1];
+        setActiveModuleId(nextModule.id);
+        setTaskIndexByModule((current) => ({
+          ...current,
+          [nextModule.id]: 0,
+        }));
+        
+        // Scroll the next module smoothly into view (centered)
+        setTimeout(() => {
+          const nextModuleBtn = document.querySelector(`.module-item[data-id="${nextModule.id}"]`);
+          if (nextModuleBtn) {
+            nextModuleBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 50);
+      } else {
+        alert("Congratulations! You have completed all modules.");
+      }
+    }
+  }
+
+  function skipTask() {
+    triggerTaskChange(() => {
+      advanceToNextTask();
     });
   }
 
@@ -123,6 +177,10 @@ function TutorPage() {
     });
 
     setEvaluation(result);
+
+    triggerTaskChange(() => {
+      advanceToNextTask();
+    });
   }
 
   const progressLabel = activeTask ? `${activeTaskIndex + 1} / ${moduleTasks.length}` : "0 / 0";
@@ -152,6 +210,7 @@ function TutorPage() {
               return (
                 <button
                   key={module.id}
+                  data-id={module.id}
                   type="button"
                   className={`module-item ${active ? "active" : ""} ${completed ? "completed" : ""} ${locked ? "locked" : ""}`}
                   onClick={() => selectModule(module.id)}
@@ -210,45 +269,48 @@ function TutorPage() {
                   ))}
                 </div>
               </div>
-              <h2>{activeTask?.prompt ?? "Choose a module to load its first task."}</h2>
             </div>
 
-            <div className="task-meta">
-              <span>{activeTask?.type?.toUpperCase() ?? "TASK"}</span>
-              <span>{activeTask?.difficulty ?? "foundation"}</span>
-              <span>{activeTask?.baselineTimeSeconds ?? 0}s baseline</span>
-            </div>
+            <div className={`task-body-transition ${isTransitioning ? "transitioning" : ""}`} style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+              <h2 className="task-prompt">{activeTask?.prompt ?? "Choose a module to load its first task."}</h2>
 
-            {activeTask?.type === "mcq" ? (
-              <div className="choices">
-                {(activeTask?.choices ?? []).map((choice) => (
-                  <label key={choice} className={selectedChoice === choice ? "choice selected" : "choice"}>
-                    <input
-                      type="radio"
-                      name="choice"
-                      value={choice}
-                      checked={selectedChoice === choice}
-                      onChange={(event) => setSelectedChoice(event.target.value)}
-                    />
-                    <span>{choice}</span>
-                  </label>
-                ))}
+              <div className="task-meta">
+                <span>{activeTask?.type?.toUpperCase() ?? "TASK"}</span>
+                <span>{activeTask?.difficulty ?? "foundation"}</span>
+                <span>{activeTask?.baselineTimeSeconds ?? 0}s baseline</span>
               </div>
-            ) : activeTask ? (
-              <div className="code-answer">
-                <textarea
-                  value={codeAnswer}
-                  onChange={(event) => setCodeAnswer(event.target.value)}
-                  rows={11}
-                  spellCheck="false"
-                />
-                <p>{activeTask?.answerGuide}</p>
-              </div>
-            ) : (
-              <div className="empty-task-state">
-                Select a module to begin.
-              </div>
-            )}
+
+              {activeTask?.type === "mcq" ? (
+                <div className="choices">
+                  {(activeTask?.choices ?? []).map((choice) => (
+                    <label key={choice} className={selectedChoice === choice ? "choice selected" : "choice"}>
+                      <input
+                        type="radio"
+                        name="choice"
+                        value={choice}
+                        checked={selectedChoice === choice}
+                        onChange={(event) => setSelectedChoice(event.target.value)}
+                      />
+                      <span>{choice}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : activeTask ? (
+                <div className="code-answer">
+                  <textarea
+                    value={codeAnswer}
+                    onChange={(event) => setCodeAnswer(event.target.value)}
+                    rows={11}
+                    spellCheck="false"
+                  />
+                  <p>{activeTask?.answerGuide}</p>
+                </div>
+              ) : (
+                <div className="empty-task-state">
+                  Select a module to begin.
+                </div>
+              )}
+            </div>
 
             <div className="task-footer">
               <div className="task-footer-meta">
@@ -256,12 +318,12 @@ function TutorPage() {
                 <span className="timer-text">{elapsedSeconds}s elapsed</span>
               </div>
               <div className="task-navigation">
-                <button type="button" onClick={() => moveTask("back")} disabled={!canGoBack}>
+                <button type="button" onClick={goBack} disabled={!canGoBack}>
                   <ChevronLeft size={16} />
                   Back
                 </button>
-                <button type="button" onClick={() => moveTask("forward")} disabled={!canGoForward}>
-                  Forward
+                <button type="button" onClick={skipTask} disabled={!activeTask}>
+                  Skip
                   <ChevronRight size={16} />
                 </button>
               </div>

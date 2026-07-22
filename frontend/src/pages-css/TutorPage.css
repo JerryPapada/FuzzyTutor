@@ -331,13 +331,25 @@
   text-transform: uppercase;
 }
 
-.task-header h2 {
+.task-header h2,
+.task-prompt {
   max-width: 840px;
   font-size: clamp(1.32rem, 3.1vw, 2rem);
   line-height: 1.16;
   text-align: center;
   margin: 12px auto 0;
   color: var(--text-main);
+}
+
+.task-body-transition {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.task-body-transition.transitioning {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .task-meta {
