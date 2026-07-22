@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   Brain,
   ChevronLeft,
   ChevronRight,
@@ -10,9 +9,11 @@ import {
   HelpCircle,
   Layers3,
   Play,
-  Terminal,
+  Check,
+  Lock,
 } from "lucide-react";
 import StatCard from "../components/StatCard";
+import Header from "../components/Header";
 import useElapsedTimer from "../hooks/useElapsedTimer";
 import { fetchHealth } from "../services/healthService";
 import { fetchModules, fetchTasks } from "../services/learningService";
@@ -130,21 +131,7 @@ function TutorPage() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Programming Concepts Tutor</p>
-          <div className="header-brand">
-            <div className="header-logo-icon" aria-hidden="true">
-              <Terminal size={22} strokeWidth={2.5} />
-            </div>
-            <h1>FuzzyTutor</h1>
-          </div>
-        </div>
-        <div className={`status status-${health}`}>
-          <Activity size={16} />
-          <span>API {health}</span>
-        </div>
-      </header>
+      <Header />
 
       <section className="workspace">
         <aside className="module-panel">
@@ -159,23 +146,45 @@ function TutorPage() {
           <div className="module-list">
             {modules.map((module) => {
               const active = module.id === activeModuleId;
+              const completed = module.id < activeModuleId;
+              const locked = module.id > activeModuleId;
 
               return (
                 <button
                   key={module.id}
                   type="button"
-                  className={`module-item ${active ? "active" : ""}`}
+                  className={`module-item ${active ? "active" : ""} ${completed ? "completed" : ""} ${locked ? "locked" : ""}`}
                   onClick={() => selectModule(module.id)}
                 >
-                  <div className="module-item-head">
-                    <span>M{module.id}</span>
-                    <h3>{module.title}</h3>
+                  <div className="module-timeline">
+                    <div className="module-indicator">
+                      {completed ? (
+                        <div className="circle completed">
+                          <Check size={14} strokeWidth={3} />
+                        </div>
+                      ) : active ? (
+                        <div className="circle current">
+                          <span>{`[ ]`}</span>
+                        </div>
+                      ) : (
+                        <div className="circle locked">
+                          <Lock size={12} />
+                        </div>
+                      )}
+                      <div className="line" />
+                    </div>
+                    <div className="module-details">
+                      <div className="module-title-row">
+                        {active && <span className="current-badge">CURRENT</span>}
+                        <h3>{module.title}</h3>
+                      </div>
+                      <div className="module-score-row">
+                        <span className="score-pill">Score {module.score}%</span>
+                        <span className="score-pill muted">Aggregate {module.aggregateScore}%</span>
+                      </div>
+                      <small>{module.concepts?.join(" · ")}</small>
+                    </div>
                   </div>
-                  <div className="module-score-row">
-                    <span className="score-pill">Score {module.score}%</span>
-                    <span className="score-pill muted">Aggregate {module.aggregateScore}%</span>
-                  </div>
-                  <small>{module.concepts?.join(" · ")}</small>
                 </button>
               );
             })}
@@ -185,13 +194,23 @@ function TutorPage() {
         <section className="task-panel">
           <div className="task-window">
             <div className="task-header">
-              <GraduationCap size={24} />
-              <div>
-                <p>
-                  {activeModule?.title ?? "Select a module"} · {progressLabel}
-                </p>
-                <h2>{activeTask?.prompt ?? "Choose a module to load its first task."}</h2>
+              <div className="task-header-top">
+                <div className="task-header-title">
+                  <GraduationCap size={20} />
+                  <span>
+                    {activeModule?.title ?? "Select a module"} · {progressLabel}
+                  </span>
+                </div>
+                <div className="progress-pills">
+                  {moduleTasks.map((_, idx) => (
+                    <div
+                      key={idx}
+                      className={`progress-pill ${idx === activeTaskIndex ? "active" : ""}`}
+                    />
+                  ))}
+                </div>
               </div>
+              <h2>{activeTask?.prompt ?? "Choose a module to load its first task."}</h2>
             </div>
 
             <div className="task-meta">
@@ -234,7 +253,7 @@ function TutorPage() {
             <div className="task-footer">
               <div className="task-footer-meta">
                 <Clock3 size={16} />
-                <span>{elapsedSeconds}s elapsed</span>
+                <span className="timer-text">{elapsedSeconds}s elapsed</span>
               </div>
               <div className="task-navigation">
                 <button type="button" onClick={() => moveTask("back")} disabled={!canGoBack}>

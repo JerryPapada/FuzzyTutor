@@ -1,11 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap');
+
 :root {
-  color: #17212b;
-  background:
-    radial-gradient(circle at top left, rgb(20 75 98 / 22%), transparent 34%),
-    radial-gradient(circle at top right, rgb(49 107 74 / 16%), transparent 28%),
-    linear-gradient(180deg, #f4f7f9 0%, #edf2f6 100%);
-  font-family:
-    "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bg-dark: #0d1117;          /* Very dark canvas background from Leetcode screenshot */
+  --bg-panel: #161b22;         /* Sleek dark panel backgrounds */
+  --bg-panel-secondary: #21262d; /* Slightly lighter interactive panels */
+  --border-subtle: #30363d;    /* Subtle dark grey borders */
+  --text-main: #f0f6fc;        /* Crisp light text */
+  --text-muted: #8b949e;       /* Muted gray text */
+  --primary-accent: #58a6ff;   /* Bright blue for main highlights */
+  --green-accent: #2ea043;     /* Success green for Submit response */
+  --green-accent-hover: #3fb950;
+  --amber-accent: #d29922;     /* Alert orange for friction / strain */
+  
+  color: var(--text-main);
+  background-color: var(--bg-dark);
+  font-family: "Inter", "Outfit", sans-serif;
 }
 
 * {
@@ -16,13 +25,24 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: inherit;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 30px rgba(88, 166, 255, 0.28); /* Fixed viewport glow at the edges */
+  z-index: 9999;
 }
 
 button,
 input,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 button {
