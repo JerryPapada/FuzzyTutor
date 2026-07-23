@@ -77,6 +77,27 @@ class LearningApiTests(TestCase):
         submission = TaskSubmission.objects.get(pk=result["submissionId"])
         self.assertIsNone(submission.is_correct)
 
+    def test_skip_records_an_incomplete_attempt_and_advances_the_session(self):
+        state = self.create_session()
+        response = self.client.post(
+            "/api/learning/submissions/",
+            {
+                "sessionToken": state["sessionToken"],
+                "taskId": state["currentTaskId"],
+                "elapsedTimeSeconds": 3,
+                "skipped": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        submission = TaskSubmission.objects.get(pk=response.json()["submissionId"])
+        self.assertEqual(submission.completion_ratio, 0)
+        self.assertIsNone(submission.is_correct)
+        self.assertTrue(submission.answer_payload["skipped"])
+        self.assertEqual(response.json()["session"]["completedTaskCount"], 1)
+        self.assertNotEqual(response.json()["nextTask"]["id"], state["currentTaskId"])
+
     def test_adaptation_does_not_repeat_tasks_and_advances_modules(self):
         state = self.create_session()
         token = state["sessionToken"]

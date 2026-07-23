@@ -57,6 +57,7 @@ class SubmissionSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     taskId = serializers.CharField()
     elapsedTimeSeconds = serializers.FloatField(min_value=0.1)
+    skipped = serializers.BooleanField(default=False)
     assistanceInteractions = serializers.IntegerField(default=0, min_value=0)
     completionRatio = serializers.FloatField(default=1.0, min_value=0.0, max_value=1.0)
     selectedChoice = serializers.CharField(required=False, allow_blank=True)
@@ -84,10 +85,15 @@ class SubmissionSerializer(serializers.Serializer):
             )
         if attrs["session"].submissions.filter(task_id=task["id"]).exists():
             raise serializers.ValidationError({"taskId": "Task has already been completed."})
-        if task["type"] == "mcq" and not attrs.get("selectedChoice"):
+        if task["type"] == "mcq" and not attrs["skipped"] and not attrs.get("selectedChoice"):
             raise serializers.ValidationError(
                 {"selectedChoice": "A selected choice is required for an MCQ task."}
             )
+        if attrs["skipped"]:
+            # A skip is an explicit incomplete attempt, regardless of any stale form values.
+            attrs["completionRatio"] = 0.0
+            attrs.pop("selectedChoice", None)
+            attrs.pop("answerText", None)
         attrs["task"] = task
         return attrs
 
@@ -121,13 +127,13 @@ class ErrorResponseSerializer(serializers.Serializer):
     moduleId = serializers.CharField(required=False)
     direction = serializers.CharField(required=False)
 
-
+# Serializer for difficulty counts in a module
 class DifficultyCountsSerializer(serializers.Serializer):
     foundation = serializers.IntegerField()
     intermediate = serializers.IntegerField()
     advanced = serializers.IntegerField()
 
-
+# Serializer for module response data
 class ModuleResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     title = serializers.CharField()
@@ -137,11 +143,11 @@ class ModuleResponseSerializer(serializers.Serializer):
     taskCount = serializers.IntegerField()
     difficultyCounts = DifficultyCountsSerializer()
 
-
+# Serializer for a list of modules in the response
 class ModulesResponseSerializer(serializers.Serializer):
     modules = ModuleResponseSerializer(many=True)
 
-
+# Serializer for task response data
 class TaskResponseSerializer(serializers.Serializer):
     id = serializers.CharField()
     moduleId = serializers.IntegerField()
@@ -157,7 +163,7 @@ class TaskResponseSerializer(serializers.Serializer):
     choices = serializers.ListField(child=serializers.CharField(), required=False)
     starterCode = serializers.CharField(required=False, allow_blank=True)
 
-
+# Serializer for task navigation response data
 class TaskNavigationResponseSerializer(serializers.Serializer):
     task = TaskResponseSerializer(allow_null=True)
     position = serializers.IntegerField()
@@ -165,12 +171,12 @@ class TaskNavigationResponseSerializer(serializers.Serializer):
     hasPrevious = serializers.BooleanField()
     hasNext = serializers.BooleanField()
 
-
+# Serializer for task catalog response data
 class TaskCatalogResponseSerializer(serializers.Serializer):
     tasks = TaskResponseSerializer(many=True)
     activeTask = TaskNavigationResponseSerializer()
 
-
+# Serializer for session state response data
 class SessionStateResponseSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     currentModuleId = serializers.IntegerField()
@@ -183,18 +189,18 @@ class SessionStateResponseSerializer(serializers.Serializer):
     curriculumComplete = serializers.BooleanField()
     currentTask = TaskResponseSerializer(allow_null=True)
 
-
+# Serializer for the current session task response data
 class CurrentSessionTaskResponseSerializer(serializers.Serializer):
     task = TaskResponseSerializer(allow_null=True)
     session = SessionStateResponseSerializer()
 
-
+# Serializer for adaptation signals response data
 class AdaptationSignalsResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
     systemCognitiveFriction = serializers.FloatField()
     recommendation = serializers.CharField()
 
-
+# Serializer for adaptation response data
 class AdaptationResponseSerializer(serializers.Serializer):
     direction = serializers.CharField()
     targetDifficultyLevel = serializers.IntegerField()
@@ -204,7 +210,7 @@ class AdaptationResponseSerializer(serializers.Serializer):
     reason = serializers.CharField()
     signals = AdaptationSignalsResponseSerializer()
 
-
+# Serializer for submission response data
 class SubmissionResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
     systemCognitiveFriction = serializers.FloatField()
@@ -219,7 +225,7 @@ class SubmissionResponseSerializer(serializers.Serializer):
     adaptation = AdaptationResponseSerializer()
     surveyDue = serializers.BooleanField()
 
-
+# Serializer for micro-survey response data
 class MicroSurveyResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     sessionToken = serializers.CharField()
@@ -230,7 +236,7 @@ class MicroSurveyResponseSerializer(serializers.Serializer):
     milestoneTaskCount = serializers.IntegerField()
     surveyDue = serializers.BooleanField()
 
-
+# Serializer for a single row of training data
 class TrainingDataRowSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     taskId = serializers.CharField()
@@ -253,7 +259,7 @@ class TrainingDataRowSerializer(serializers.Serializer):
     confidenceScore = serializers.IntegerField(allow_null=True)
     createdAt = serializers.DateTimeField()
 
-
+# Serializer for training data export response
 class TrainingDataExportResponseSerializer(serializers.Serializer):
     rows = TrainingDataRowSerializer(many=True)
     count = serializers.IntegerField()

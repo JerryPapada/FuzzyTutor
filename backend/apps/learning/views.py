@@ -44,6 +44,8 @@ def session_payload(session):
 
 def answer_payload(validated):
     payload = dict(validated.get("answerPayload") or {})
+    if validated.get("skipped"):
+        payload["skipped"] = True
     if "selectedChoice" in validated:
         payload["selectedChoice"] = validated["selectedChoice"]
     if "answerText" in validated:
@@ -52,6 +54,8 @@ def answer_payload(validated):
 
 
 def correctness_signal(task, validated):
+    if validated.get("skipped"):
+        return None
     if task["type"] == "mcq" and validated.get("selectedChoice"):
         return validated["selectedChoice"] == task.get("correctChoice")
     return None
@@ -237,7 +241,7 @@ def session_detail(request, session_token):
     tags=["learning"],
     summary="Submit a task response",
     description=(
-        "Persists a task submission, derives fuzzy inputs from task metadata, runs the "
+        "Persists a task submission or explicit skip, derives fuzzy inputs from task metadata, runs the "
         "ANFIS and Mamdani engines, stores the model trace, updates session state, and "
         "returns the next adapted task."
     ),
