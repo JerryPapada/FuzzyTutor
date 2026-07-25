@@ -69,10 +69,10 @@
 .module-panel,
 .task-panel,
 .xai-panel {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(48, 54, 61, 0.75);
   border-radius: 24px;
-  background: var(--bg-panel);
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, rgba(22, 27, 34, 0.85) 100%);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .module-panel {
@@ -136,12 +136,12 @@
 .module-item {
   width: 100%;
   padding: 12px 14px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
   color: var(--text-main);
   text-align: left;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: visible;
   /* Let the timeline line connect outside */
@@ -149,11 +149,14 @@
 }
 
 .module-item:hover:not(.locked) {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .module-item.active {
-  background: rgba(88, 166, 255, 0.06);
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.02) 100%);
+  border-color: rgba(88, 166, 255, 0.25);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
 }
 
 .module-item.locked {
@@ -194,12 +197,24 @@
   color: white;
 }
 
+@keyframes active-circle-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.5), 0 0 8px rgba(88, 166, 255, 0.3);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(88, 166, 255, 0), 0 0 12px rgba(88, 166, 255, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0), 0 0 8px rgba(88, 166, 255, 0.3);
+  }
+}
+
 .module-indicator .circle.current {
   background: var(--bg-panel);
   /* Solid color to cover the line segment behind it */
   border: 2px solid var(--primary-accent);
   color: var(--primary-accent);
-  box-shadow: 0 0 10px rgba(88, 166, 255, 0.3);
+  animation: active-circle-pulse 2s infinite ease-in-out;
 }
 
 .module-indicator .circle.locked {
@@ -250,13 +265,15 @@
 
 .current-badge {
   align-self: flex-start;
-  font-size: 0.62rem;
+  font-size: 0.65rem;
   font-weight: 800;
-  color: var(--primary-accent);
-  background: rgba(88, 166, 255, 0.12);
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.05em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   margin-bottom: 2px;
   width: fit-content;
 }
@@ -273,16 +290,20 @@
   align-items: center;
   min-height: 28px;
   border-radius: 999px;
-  padding: 0 10px;
-  color: var(--primary-accent);
-  background: rgba(88, 166, 255, 0.15);
-  font-size: 0.84rem;
-  font-weight: 800;
+  padding: 2px 12px;
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.25) 0%, rgba(88, 166, 255, 0.1) 100%);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .score-pill.muted {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .module-item small {
@@ -540,8 +561,13 @@
 
 .stat-card {
   border-radius: 18px;
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--border-subtle);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
 }
 
 .stat-header {
@@ -556,9 +582,10 @@
 }
 
 .stat-card strong {
-  font-size: 2rem;
+  font-size: 2.2rem;
   line-height: 1;
   color: var(--text-main);
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
 }
 
 .stat-meter {
@@ -567,40 +594,65 @@
   margin-top: 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .stat-meter span {
   display: block;
   height: 100%;
   border-radius: inherit;
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stat-card p {
   margin: 12px 0 0;
   color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 .stat-card-mastery {
-  background: rgba(46, 160, 67, 0.06);
-  border-color: rgba(46, 160, 67, 0.15);
+  background: linear-gradient(135deg, rgba(46, 160, 67, 0.06) 0%, rgba(22, 27, 34, 0.4) 100%);
+  border-color: rgba(46, 160, 67, 0.25);
+  box-shadow: 0 4px 15px rgba(46, 160, 67, 0.04);
+}
+
+.stat-card-mastery:hover {
+  border-color: rgba(46, 160, 67, 0.55);
+  box-shadow: 0 8px 24px rgba(46, 160, 67, 0.15);
 }
 
 .stat-card-mastery .stat-meter span {
   background: linear-gradient(90deg, var(--green-accent), var(--green-accent-hover));
+  box-shadow: 0 0 10px rgba(46, 160, 67, 0.5);
 }
 
 .stat-card-friction {
-  background: rgba(210, 153, 34, 0.06);
-  border-color: rgba(210, 153, 34, 0.15);
+  background: linear-gradient(135deg, rgba(210, 153, 34, 0.06) 0%, rgba(22, 27, 34, 0.4) 100%);
+  border-color: rgba(210, 153, 34, 0.25);
+  box-shadow: 0 4px 15px rgba(210, 153, 34, 0.04);
+}
+
+.stat-card-friction:hover {
+  border-color: rgba(210, 153, 34, 0.55);
+  box-shadow: 0 8px 24px rgba(210, 153, 34, 0.15);
 }
 
 .stat-card-friction .stat-meter span {
   background: linear-gradient(90deg, var(--amber-accent), #e3b341);
+  box-shadow: 0 0 10px rgba(210, 153, 34, 0.5);
 }
 
 .recommendation {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 16px;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.05) 0%, rgba(22, 27, 34, 0.4) 100%);
+  padding: 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.2s ease;
+}
+
+.recommendation:hover {
+  border-color: rgba(88, 166, 255, 0.4);
 }
 
 .recommendation span {
@@ -621,6 +673,7 @@
   margin-top: 10px;
   color: var(--primary-accent);
   line-height: 1.45;
+  text-shadow: 0 0 10px rgba(88, 166, 255, 0.25);
 }
 
 @media (max-width: 1280px) {

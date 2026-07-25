@@ -34,6 +34,7 @@ function TutorPage() {
   const [activeModuleId, setActiveModuleId] = useState(null);
   const [taskIndexByModule, setTaskIndexByModule] = useState({});
   const [evaluation, setEvaluation] = useState(null);
+  const [moduleScores, setModuleScores] = useState({});
   const [selectedChoice, setSelectedChoice] = useState("");
   const [codeAnswer, setCodeAnswer] = useState("");
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -98,6 +99,10 @@ function TutorPage() {
     resetTimer();
   }, [activeTask?.id]);
 
+  useEffect(() => {
+    setEvaluation(null);
+  }, [activeModuleId]);
+
   function selectModule(moduleId) {
     if (moduleId > activeModuleId) {
       if (moduleId > activeModuleId + 1) {
@@ -152,7 +157,7 @@ function TutorPage() {
     });
   }
 
-  function advanceToNextTask(wasSubmitted = false) {
+  function advanceToNextTask(wasSubmitted = false, lastEvaluation = null) {
     if (activeModuleId == null || moduleTasks.length === 0) {
       return;
     }
@@ -166,6 +171,17 @@ function TutorPage() {
     );
 
     if (allTasksSubmitted) {
+      const evalToUse = lastEvaluation || evaluation;
+      if (evalToUse) {
+        setModuleScores((prev) => ({
+          ...prev,
+          [activeModuleId]: {
+            score: evalToUse.knowledgeMastery,
+            aggregate: evalToUse.systemCognitiveFriction,
+          },
+        }));
+      }
+
       const currentModuleIdx = modules.findIndex((m) => m.id === activeModuleId);
       if (currentModuleIdx !== -1 && currentModuleIdx < modules.length - 1) {
         const nextModule = modules[currentModuleIdx + 1];
@@ -241,7 +257,7 @@ function TutorPage() {
     setSkippedTaskIds((prev) => prev.filter((id) => id !== activeTask.id));
 
     triggerTaskChange(() => {
-      advanceToNextTask(true);
+      advanceToNextTask(true, result);
     });
   }
 
@@ -295,7 +311,7 @@ function TutorPage() {
                         </div>
                       ) : active ? (
                         <div className="circle current">
-                          <span>{`[ ]`}</span>
+                          <Play size={11} fill="currentColor" style={{ marginLeft: "1.5px" }} />
                         </div>
                       ) : (
                         <div className="circle locked">
@@ -310,8 +326,8 @@ function TutorPage() {
                         <h3>{module.title}</h3>
                       </div>
                       <div className="module-score-row">
-                        <span className="score-pill">Score -%</span>
-                        <span className="score-pill muted">Aggregate -%</span>
+                        <span className="score-pill">Score {moduleScores[module.id]?.score != null ? `${moduleScores[module.id].score}%` : "-%"}</span>
+                        <span className="score-pill muted">Aggregate {moduleScores[module.id]?.aggregate != null ? `${moduleScores[module.id].aggregate}%` : "-%"}</span>
                       </div>
                       <small>{module.concepts?.join(" · ")}</small>
                     </div>
