@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   Brain,
   ChevronLeft,
@@ -11,6 +11,7 @@ import {
   Play,
   Check,
   Lock,
+  AlertCircle,
 } from "lucide-react";
 import StatCard from "../components/StatCard";
 import Header from "../components/Header";
@@ -20,6 +21,12 @@ import { fetchModules, fetchTasks } from "../services/learningService";
 import { submitEvaluation } from "../services/fuzzyService";
 import "../pages-css/TutorPage.css";
 
+const RECOMMENDATION_LABELS = {
+  increase_or_hold_high_tier: "Advance or Maintain High Difficulty Level",
+  reduce_difficulty_and_show_support: "Reduce Difficulty Level and Provide Support",
+  hold_current_tier: "Maintain Current Difficulty Level",
+};
+
 function TutorPage() {
   const [health, setHealth] = useState("checking");
   const [modules, setModules] = useState([]);
@@ -27,9 +34,26 @@ function TutorPage() {
   const [activeModuleId, setActiveModuleId] = useState(null);
   const [taskIndexByModule, setTaskIndexByModule] = useState({});
   const [evaluation, setEvaluation] = useState(null);
+  const [moduleScores, setModuleScores] = useState({});
   const [selectedChoice, setSelectedChoice] = useState("");
   const [codeAnswer, setCodeAnswer] = useState("");
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [submittedTaskIds, setSubmittedTaskIds] = useState([]);
+  const [skippedTaskIds, setSkippedTaskIds] = useState([]);
+  const [notificationMsg, setNotificationMsg] = useState("");
+  const [showNotification, setShowNotification] = useState(false);
+  const notificationTimeoutRef = useRef(null);
+
+  function triggerNotification(message) {
+    setNotificationMsg(message);
+    setShowNotification(true);
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
+    notificationTimeoutRef.current = setTimeout(() => {
+      setShowNotification(false);
+    }, 5000);
+  }
 
   const activeModule = useMemo(
     () => modules.find((module) => module.id === activeModuleId) ?? null,
@@ -72,13 +96,29 @@ function TutorPage() {
 
     setSelectedChoice(activeTask.choices?.[0] ?? "");
     setCodeAnswer(activeTask.starterCode ?? "");
-    setEvaluation(null);
     resetTimer();
   }, [activeTask?.id]);
 
-  function selectModule(moduleId) {
-    setActiveModuleId(moduleId);
+  useEffect(() => {
     setEvaluation(null);
+  }, [activeModuleId]);
+
+  function selectModule(moduleId) {
+    if (moduleId > activeModuleId) {
+      if (moduleId > activeModuleId + 1) {
+        return;
+      }
+      const allTasksSubmitted = moduleTasks.every((task) =>
+        submittedTaskIds.includes(task.id)
+      );
+      if (!allTasksSubmitted) {
+        triggerNotification(
+          "Please complete all tasks in this module to proceed."
+        );
+        return;
+      }
+    }
+    setActiveModuleId(moduleId);
   }
 
   function triggerTaskChange(changeCallback) {
@@ -90,6 +130,11 @@ function TutorPage() {
   }
 
   function goBack() {
+    if (activeTask && !submittedTaskIds.includes(activeTask.id)) {
+      setSkippedTaskIds((prev) =>
+        prev.includes(activeTask.id) ? prev : [...prev, activeTask.id]
+      );
+    }
     triggerTaskChange(() => {
       moveTask("back");
     });
@@ -112,17 +157,31 @@ function TutorPage() {
     });
   }
 
-  function advanceToNextTask() {
+  function advanceToNextTask(wasSubmitted = false, lastEvaluation = null) {
     if (activeModuleId == null || moduleTasks.length === 0) {
       return;
     }
 
-    if (activeTaskIndex < moduleTasks.length - 1) {
-      setTaskIndexByModule((current) => ({
-        ...current,
-        [activeModuleId]: activeTaskIndex + 1,
-      }));
-    } else {
+    const updatedSubmittedIds = wasSubmitted
+      ? (submittedTaskIds.includes(activeTask.id) ? submittedTaskIds : [...submittedTaskIds, activeTask.id])
+      : submittedTaskIds;
+
+    const allTasksSubmitted = moduleTasks.every((task) =>
+      updatedSubmittedIds.includes(task.id)
+    );
+
+    if (allTasksSubmitted) {
+      const evalToUse = lastEvaluation || evaluation;
+      if (evalToUse) {
+        setModuleScores((prev) => ({
+          ...prev,
+          [activeModuleId]: {
+            score: evalToUse.knowledgeMastery,
+            aggregate: evalToUse.systemCognitiveFriction,
+          },
+        }));
+      }
+
       const currentModuleIdx = modules.findIndex((m) => m.id === activeModuleId);
       if (currentModuleIdx !== -1 && currentModuleIdx < modules.length - 1) {
         const nextModule = modules[currentModuleIdx + 1];
@@ -142,12 +201,27 @@ function TutorPage() {
       } else {
         alert("Congratulations! You have completed all modules.");
       }
+    } else {
+      if (activeTaskIndex < moduleTasks.length - 1) {
+        setTaskIndexByModule((current) => ({
+          ...current,
+          [activeModuleId]: activeTaskIndex + 1,
+        }));
+      } else {
+        triggerNotification(
+          "Please complete all tasks in this module to proceed."
+        );
+      }
     }
   }
 
   function skipTask() {
+    setSkippedTaskIds((prev) =>
+      prev.includes(activeTask.id) ? prev : [...prev, activeTask.id]
+    );
+
     triggerTaskChange(() => {
-      advanceToNextTask();
+      advanceToNextTask(false);
     });
   }
 
@@ -177,9 +251,13 @@ function TutorPage() {
     });
 
     setEvaluation(result);
+    setSubmittedTaskIds((prev) =>
+      prev.includes(activeTask.id) ? prev : [...prev, activeTask.id]
+    );
+    setSkippedTaskIds((prev) => prev.filter((id) => id !== activeTask.id));
 
     triggerTaskChange(() => {
-      advanceToNextTask();
+      advanceToNextTask(true, result);
     });
   }
 
@@ -190,6 +268,16 @@ function TutorPage() {
   return (
     <main className="app-shell">
       <Header />
+
+      {/* Custom Notification Toast */}
+      <div className={`custom-notification ${showNotification ? "show" : ""}`}>
+        <div className="custom-notification-icon">
+          <AlertCircle size={20} />
+        </div>
+        <div className="custom-notification-content">
+          {notificationMsg}
+        </div>
+      </div>
 
       <section className="workspace">
         <aside className="module-panel">
@@ -223,7 +311,7 @@ function TutorPage() {
                         </div>
                       ) : active ? (
                         <div className="circle current">
-                          <span>{`[ ]`}</span>
+                          <Play size={11} fill="currentColor" style={{ marginLeft: "1.5px" }} />
                         </div>
                       ) : (
                         <div className="circle locked">
@@ -238,8 +326,8 @@ function TutorPage() {
                         <h3>{module.title}</h3>
                       </div>
                       <div className="module-score-row">
-                        <span className="score-pill">Score {module.score}%</span>
-                        <span className="score-pill muted">Aggregate {module.aggregateScore}%</span>
+                        <span className="score-pill">Score {moduleScores[module.id]?.score != null ? `${moduleScores[module.id].score}%` : "-%"}</span>
+                        <span className="score-pill muted">Aggregate {moduleScores[module.id]?.aggregate != null ? `${moduleScores[module.id].aggregate}%` : "-%"}</span>
                       </div>
                       <small>{module.concepts?.join(" · ")}</small>
                     </div>
@@ -261,12 +349,25 @@ function TutorPage() {
                   </span>
                 </div>
                 <div className="progress-pills">
-                  {moduleTasks.map((_, idx) => (
-                    <div
-                      key={idx}
-                      className={`progress-pill ${idx === activeTaskIndex ? "active" : ""}`}
-                    />
-                  ))}
+                  {moduleTasks.map((task, idx) => {
+                    const isActive = idx === activeTaskIndex;
+                    const isSubmitted = submittedTaskIds.includes(task.id);
+                    const isSkipped = skippedTaskIds.includes(task.id);
+                    const statusClass = isActive
+                      ? "active"
+                      : isSubmitted
+                      ? "submitted"
+                      : isSkipped
+                      ? "skipped"
+                      : "";
+
+                    return (
+                      <div
+                        key={task.id}
+                        className={`progress-pill ${statusClass}`}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -322,7 +423,7 @@ function TutorPage() {
                   <ChevronLeft size={16} />
                   Back
                 </button>
-                <button type="button" onClick={skipTask} disabled={!activeTask}>
+                <button type="button" onClick={skipTask} disabled={!activeTask || activeTaskIndex === moduleTasks.length - 1}>
                   Skip
                   <ChevronRight size={16} />
                 </button>
@@ -363,7 +464,11 @@ function TutorPage() {
 
           <div className="recommendation">
             <span>{evaluation?.focusState ?? "Waiting for a submission"}</span>
-            <p>{evaluation?.recommendation ?? "The next task will adapt after the first response."}</p>
+            <p>
+              {evaluation?.recommendation
+                ? (RECOMMENDATION_LABELS[evaluation.recommendation] ?? evaluation.recommendation)
+                : "The next task will adapt after the first response."}
+            </p>
             <strong>{evaluation?.supportMessage ?? "Submit a response to see the fuzzy summary."}</strong>
           </div>
         </aside>
