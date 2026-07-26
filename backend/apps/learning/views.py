@@ -15,6 +15,7 @@ from .catalog import (
     module_task_counts,
     module_task_counts_by_difficulty,
     public_task_payload,
+    review_task_payload,
     task_index,
     tasks_for_module,
 )
@@ -25,6 +26,13 @@ from .models import (
     MicroSurveyResponse,
     TaskSubmission,
 )
+from .progress import (
+    evaluate_module_exit,
+    get_module_progress,
+    initialize_module_progress,
+    session_module_progress_payload,
+    update_module_progress,
+)
 from .serializers import (
     CurrentSessionTaskResponseSerializer,
     ErrorResponseSerializer,
@@ -33,6 +41,7 @@ from .serializers import (
     MicroSurveyResponseSerializer,
     MicroSurveySerializer,
     ModulesResponseSerializer,
+    ReviewResponseSerializer,
     SessionCreateSerializer,
     SessionSerializer,
     SessionStateResponseSerializer,
@@ -95,6 +104,7 @@ def session_payload(session):
     payload = SessionSerializer(session).data
     payload["currentTask"] = public_task_payload(get_task(session.current_task_id))
     payload["hintState"] = hint_state_payload(session)
+    payload["moduleProgress"] = session_module_progress_payload(session)
     return payload
 
 
@@ -262,6 +272,7 @@ def next_task(request):
     responses={201: SessionStateResponseSerializer, 400: ErrorResponseSerializer},
 )
 @api_view(["POST"])
+@transaction.atomic
 def sessions(request):
     serializer = SessionCreateSerializer(data=request.data, context={"tasks": TASK_BANK})
     if not serializer.is_valid():
@@ -273,6 +284,7 @@ def sessions(request):
         current_module_id=task["moduleId"],
         current_task_id=task["id"],
     )
+    initialize_module_progress(session, task["moduleId"])
     return Response(session_payload(session), status=status.HTTP_201_CREATED)
 
 
@@ -291,6 +303,70 @@ def session_detail(request, session_token):
     except LearnerSession.DoesNotExist:
         return Response({"detail": "Unknown session token."}, status=status.HTTP_404_NOT_FOUND)
     return Response(session_payload(session))
+
+
+@extend_schema(
+    tags=["learning"],
+    summary="Review skipped and incorrect attempts",
+    description=(
+        "Returns read-only review material for skipped tasks and incorrect MCQs. "
+        "Private answers and explanations are exposed only after the task was attempted."
+    ),
+    parameters=[
+        OpenApiParameter("session_token", OpenApiTypes.STR, OpenApiParameter.PATH),
+        OpenApiParameter("moduleId", OpenApiTypes.INT, OpenApiParameter.QUERY),
+    ],
+    responses={
+        200: ReviewResponseSerializer,
+        400: ErrorResponseSerializer,
+        404: ErrorResponseSerializer,
+    },
+)
+@api_view(["GET"])
+def session_review(request, session_token):
+    try:
+        session = LearnerSession.objects.get(token=session_token)
+    except LearnerSession.DoesNotExist:
+        return Response(
+            {"detail": "Unknown session token."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    module_id, error_response = module_id_or_error(
+        request.query_params.get("moduleId")
+    )
+    if error_response:
+        return error_response
+
+    queryset = session.submissions.order_by("created_at", "id")
+    if module_id is not None:
+        queryset = queryset.filter(module_id=module_id)
+
+    items = []
+    for submission in queryset:
+        skipped = bool(submission.answer_payload.get("skipped"))
+        if not skipped and submission.is_correct is not False:
+            continue
+        task = get_task(submission.task_id)
+        if task is None:
+            continue
+        hint_events = session.hint_events.filter(
+            task_id=submission.task_id
+        ).order_by("level", "created_at")
+        items.append(
+            {
+                "submissionId": submission.id,
+                "moduleId": submission.module_id,
+                "outcome": "skipped" if skipped else "incorrect",
+                "learnerAnswer": submission.answer_payload,
+                "task": review_task_payload(task),
+                "revealedHints": [
+                    hint_event_payload(event) for event in hint_events
+                ],
+                "submittedAt": submission.created_at.isoformat(),
+            }
+        )
+    return Response({"items": items, "count": len(items)})
 
 
 @extend_schema(
@@ -353,6 +429,11 @@ def submissions(request):
     data = serializer.validated_data
     session = data["session"]
     task = data["task"]
+    module_progress = get_module_progress(
+        session,
+        task["moduleId"],
+        for_update=True,
+    )
     elapsed = data["elapsedTimeSeconds"]
     relative_time = elapsed / max(1, task["baselineTimeSeconds"])
     is_correct = correctness_signal(task, data)
@@ -366,7 +447,7 @@ def submissions(request):
 
     fuzzy_inputs = {
         "taskMetricWeight": task["taskMetricWeight"],
-        "historicalGradeAverage": session.aggregate_mastery,
+        "historicalGradeAverage": module_progress.aggregate_mastery,
         "relativeResponseTime": relative_time,
         "assistanceInteractions": assistance_interactions,
         "completionRatio": data["completionRatio"],
@@ -388,6 +469,8 @@ def submissions(request):
         relative_response_time=relative_time,
         assistance_interactions=assistance_interactions,
         max_hint_level=max_hint_level,
+        module_mastery_before=module_progress.aggregate_mastery,
+        module_friction_before=module_progress.aggregate_friction,
         completion_ratio=data["completionRatio"],
         is_correct=is_correct,
         answer_payload=answer_payload(data),
@@ -409,7 +492,17 @@ def submissions(request):
     session.aggregate_friction = round((session.aggregate_friction * 0.65) + (fuzzy_result["systemCognitiveFriction"] * 0.35), 2)
     session.latest_recommendation = fuzzy_result["recommendation"]
 
-    adaptation_result = select_next_task(session, task, fuzzy_result)
+    update_module_progress(module_progress, fuzzy_result)
+    module_decision = evaluate_module_exit(session, module_progress)
+    submission.module_exit_outcome = module_decision["outcome"]
+    submission.save(update_fields=["module_exit_outcome"])
+
+    adaptation_result = select_next_task(
+        session,
+        task,
+        fuzzy_result,
+        module_decision,
+    )
     session.save()
 
     return Response(
@@ -419,6 +512,7 @@ def submissions(request):
             "session": session_payload(session),
             "nextTask": public_task_payload(adaptation_result["nextTask"]),
             "adaptation": adaptation_result["adaptation"],
+            "moduleDecision": adaptation_result["moduleDecision"],
             "hintUsage": {
                 "assistanceInteractions": assistance_interactions,
                 "maxHintLevel": max_hint_level,
@@ -475,7 +569,8 @@ def micro_surveys(request):
     summary="Export model training data",
     description=(
         "Exports telemetry rows that can be used to evaluate or retrain the ANFIS model, "
-        "including task metadata, timing, assistance, completion, model outputs, and survey labels."
+        "including task metadata, module-state snapshots, exit outcomes, timing, "
+        "assistance, completion, model outputs, and survey labels."
     ),
     responses={200: TrainingDataExportResponseSerializer},
 )
@@ -501,6 +596,9 @@ def training_data_export(request):
                 "difficultyLevel": submission.difficulty_level,
                 "taskMetricWeight": submission.task_metric_weight,
                 "historicalGradeAverage": log.input_snapshot.get("historicalGradeAverage"),
+                "moduleMasteryBefore": submission.module_mastery_before,
+                "moduleFrictionBefore": submission.module_friction_before,
+                "moduleExitOutcome": submission.module_exit_outcome,
                 "relativeResponseTime": submission.relative_response_time,
                 "assistanceInteractions": submission.assistance_interactions,
                 "maxHintLevel": submission.max_hint_level,

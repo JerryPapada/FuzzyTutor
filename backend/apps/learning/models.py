@@ -32,6 +32,73 @@ class LearnerSession(models.Model):
                 return milestone
         return None
 
+
+class ModuleProgress(models.Model):
+    STATUS_NOT_STARTED = "not_started"
+    STATUS_ACTIVE = "active"
+    STATUS_MASTERED = "mastered"
+    STATUS_COMPLETED_BANK = "completed_bank"
+    STATUS_LEGACY_COMPLETED = "legacy_completed"
+    STATUS_CHOICES = (
+        (STATUS_NOT_STARTED, "Not started"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_MASTERED, "Mastered"),
+        (STATUS_COMPLETED_BANK, "Completed task bank"),
+        (STATUS_LEGACY_COMPLETED, "Legacy completed"),
+    )
+    TERMINAL_STATUSES = {
+        STATUS_MASTERED,
+        STATUS_COMPLETED_BANK,
+        STATUS_LEGACY_COMPLETED,
+    }
+
+    session = models.ForeignKey(
+        LearnerSession,
+        related_name="module_progress",
+        on_delete=models.CASCADE,
+    )
+    module_id = models.PositiveSmallIntegerField()
+    aggregate_mastery = models.FloatField(default=50.0)
+    aggregate_friction = models.FloatField(default=25.0)
+    attempted_task_count = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(
+        max_length=24,
+        choices=STATUS_CHOICES,
+        default=STATUS_NOT_STARTED,
+    )
+    exit_reason = models.CharField(max_length=40, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["module_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "module_id"],
+                name="unique_session_module_progress",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(module_id__gte=1, module_id__lte=7),
+                name="module_progress_id_between_one_and_seven",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    aggregate_mastery__gte=0.0,
+                    aggregate_mastery__lte=100.0,
+                ),
+                name="module_progress_mastery_between_zero_and_one_hundred",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    aggregate_friction__gte=0.0,
+                    aggregate_friction__lte=100.0,
+                ),
+                name="module_progress_friction_between_zero_and_one_hundred",
+            ),
+        ]
+
+
 # Task submission model to track performance
 class TaskSubmission(models.Model):
     session = models.ForeignKey(
@@ -50,6 +117,9 @@ class TaskSubmission(models.Model):
     relative_response_time = models.FloatField()
     assistance_interactions = models.PositiveIntegerField(default=0)
     max_hint_level = models.PositiveSmallIntegerField(default=0)
+    module_mastery_before = models.FloatField(default=50.0)
+    module_friction_before = models.FloatField(default=25.0)
+    module_exit_outcome = models.CharField(max_length=40, default="continue")
     completion_ratio = models.FloatField(default=1.0)
     is_correct = models.BooleanField(null=True, blank=True)
     answer_payload = models.JSONField(default=dict, blank=True)

@@ -22,15 +22,16 @@ Services:
 ## Backend Workflow
 
 - Create or restore an anonymous learner session through `/api/learning/sessions/`.
-- Load the seven-module task catalog through `/api/learning/modules/` and `/api/learning/tasks/`.
+- Load the 105-task, seven-module catalog through `/api/learning/modules/` and `/api/learning/tasks/`.
 - Reveal up to three progressive, server-persisted hints through `/api/learning/hints/`.
 - Submit the backend-selected task through `/api/learning/submissions/`.
-- Use the returned ANFIS mastery, Mamdani cognitive-friction, explanation, and adapted `nextTask`.
+- Use module mastery, cognitive friction, and graded MCQ evidence to exit a module after at least six tasks, or continue through its 15-task bank.
+- Review skipped and incorrect attempts through `/api/learning/sessions/<token>/review/`.
 - Submit the persistent micro-survey requested at each unanswered five-task milestone.
 
 Interactive API documentation is available at `http://localhost:8000/api/docs/`.
 
-Public task payloads intentionally omit MCQ answer keys, code answer guides, and unrevealed hints. Hint usage and MCQ correctness are derived by the backend. Code tasks are not graded; their model signals come from completion, timing, and server-recorded assistance behavior.
+Public task payloads intentionally omit MCQ answer keys, code answer guides, explanations, and unrevealed hints. These are exposed only through read-only review after an eligible attempt. Hint usage and MCQ correctness are derived by the backend. Code tasks are not graded; their model signals come from completion, timing, and server-recorded assistance behavior.
 
 ## Fuzzy Models
 

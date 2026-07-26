@@ -75,7 +75,9 @@ The backend is separated into three Django applications:
 
 `LearnerSession` stores the anonymous session token, current module/task, rolling mastery/friction aggregates, completed-task count, and latest recommendation.
 
-`TaskSubmission` stores task metadata at the moment of submission, elapsed and relative response time, server-derived assistance count, maximum revealed hint level, completion ratio, backend-derived MCQ correctness, and the answer payload. Code-task correctness remains null because code is not automatically graded.
+`ModuleProgress` stores module-local mastery and friction, attempt count, active/terminal status, exit reason, and completion time. Module-local evidence prevents strong performance in one topic from silently skipping an untouched topic.
+
+`TaskSubmission` stores task metadata at the moment of submission, elapsed and relative response time, server-derived assistance count, maximum revealed hint level, module-state snapshots, module-exit outcome, completion ratio, backend-derived MCQ correctness, and the answer payload. Code-task correctness remains null because code is not automatically graded.
 
 `HintEvent` stores each immutable progressive hint reveal with its session, task, level, hint type, content snapshot, and elapsed reveal time. A uniqueness constraint permits each of the three levels to be revealed only once per session task. Session restoration returns revealed hints but never exposes unrevealed hint content.
 
@@ -85,7 +87,7 @@ The backend is separated into three Django applications:
 
 # Learning content and interaction design
 
-The task bank contains three difficulty bands:
+The curated task bank contains 105 tasks: 15 in each module, with five tasks in each of three difficulty bands. It contains 53 MCQs and 52 code-writing tasks:
 
 | Band | Level | Task metric weight | Estimated cognitive load |
 |---|---:|---:|---|
@@ -93,7 +95,7 @@ The task bank contains three difficulty bands:
 | Intermediate | 2 | 55 | Medium |
 | Advanced | 3 | 75 | High |
 
-Each of the seven modules contains MCQ and/or code-writing tasks. MCQ choices are returned to the browser, but the correct answer remains private on the backend. Code tasks return starter code but not an answer guide.
+MCQ choices are returned to the browser, but correct answers remain private before an attempt. Code tasks return starter code but not an answer guide. Every task also has a private explanation for read-only review.
 
 Every task defines three private, distinct support levels: a conceptual cue, a strategy, and a scaffold. The hint endpoint reveals them sequentially and persists each reveal. Normal catalog and session task payloads contain no unrevealed hint content.
 
@@ -244,9 +246,9 @@ The next difficulty decision is:
 | Mastery < 45 and friction ≥ 55 | Reduce difficulty and support | Target one level easier, floored at foundation |
 | Mixed evidence | Hold current tier | Stay near the current level |
 
-The selector never repeats a completed task while uncompleted curriculum tasks remain. It first searches the current module near the target difficulty. When the module is complete, it advances through later modules. When all tasks are complete, it sets `curriculumComplete=true` rather than silently cycling old work.
+The selector never repeats a completed task. During the first six attempts in a module it balances MCQ and code tasks while remaining near the fuzzy target difficulty. After each attempt from the sixth onward, the module is mastered when module mastery is at least 75, friction is below 40, and at least two of the latest three MCQs are correct. Otherwise selection continues through the 15-task bank. Bank exhaustion advances the learner without falsely labelling the module mastered. Untouched modules are never skipped.
 
-Session aggregates use a smoothing update: 65% prior aggregate plus 35% latest engine output. This prevents one unusually fast, slow, correct, or incomplete response from causing an abrupt learner-profile change.
+Global session and module-local aggregates use a smoothing update: 65% prior aggregate plus 35% latest engine output. Curriculum completion means that all seven module-progress records are terminal, including mastery exits and exhausted banks.
 
 # Explainability and feedback
 
@@ -273,6 +275,7 @@ Because no live study has yet been conducted, this report makes no fabricated cl
 | `GET /api/learning/tasks/` | Public, answer-safe task catalog |
 | `POST /api/learning/sessions/` | Create anonymous learning session |
 | `GET /api/learning/sessions/{token}/` | Restore session and pending survey state |
+| `GET /api/learning/sessions/{token}/review/` | Review skipped and incorrect attempts without retry |
 | `POST /api/learning/hints/` | Reveal and persist the next progressive hint |
 | `POST /api/learning/submissions/` | Persist response, run both engines, adapt next task |
 | `POST /api/learning/micro-surveys/` | Save the currently due survey milestone |
@@ -326,19 +329,18 @@ Automated backend verification includes:
 - invalid-query 400 responses;
 - rejection of client correctness and stale tasks;
 - null correctness for non-graded code tasks;
-- non-repeating adaptation and module progression; and
+- 105-task distribution, answer privacy, non-repeating selection, balanced evidence, mastery exit, bank exhaustion, review, and legacy-session progression; and
 - persistent, non-duplicated survey milestones.
 
-The verified suite contains 13 tests. Django system checks, migration-drift checks, and OpenAPI schema validation also pass.
+The verified suite contains 27 tests. Django system checks, migration-drift checks, and OpenAPI schema validation also pass.
 
 # Limitations and future improvements
 
 1. Synthetic records demonstrate the model pipeline but do not replace real learner data. With consent and appropriate anonymization, later work should retrain and recalibrate membership parameters from actual sessions.
 2. ANFIS premise membership parameters are fixed for interpretability; only consequent parameters are trained. A larger study could compare this transparent variant with hybrid premise/consequent learning.
-3. The curriculum is intentionally small. More tasks per concept would improve adaptation choice and enable concept-level mastery estimates.
-4. Session mastery is currently aggregate rather than per concept/module. A longer deployment should maintain separate knowledge components.
-5. Anonymous tokens and the telemetry export are suitable for a local assignment demonstration. A deployed multi-user system would require authentication, role-based export access, retention rules, and a production database.
-6. The user study remains future work. The existing micro-survey and export mechanisms are ready to support student and educator evaluation without inventing results.
+3. Mastery is tracked globally and per module, but not yet per individual concept tag. A longer deployment could maintain finer-grained knowledge components.
+4. Anonymous tokens and the telemetry export are suitable for a local assignment demonstration. A deployed multi-user system would require authentication, role-based export access, retention rules, and a production database.
+5. The user study remains future work. The existing micro-survey and export mechanisms are ready to support student and educator evaluation without inventing results.
 
 # Conclusion
 

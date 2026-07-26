@@ -42,6 +42,9 @@ The backend now supports:
 - Mamdani cognitive-friction model.
 - Trained ANFIS mastery model.
 - Backend next-task selection.
+- A 105-task bank: 15 tasks per module and five per difficulty.
+- Module-local mastery/friction and mastery-based exit after at least six attempts.
+- Read-only review for skipped and incorrect attempts.
 - Three server-persisted progressive hint levels per task.
 - Micro-surveys every 5 submitted tasks.
 - Training-data export.
@@ -61,6 +64,7 @@ Main backend workflow:
 POST /api/learning/sessions/
 GET  /api/learning/modules/
 GET  /api/learning/tasks/
+GET  /api/learning/sessions/<token>/review/
 POST /api/learning/hints/
 POST /api/learning/submissions/
 POST /api/learning/micro-surveys/
@@ -108,9 +112,23 @@ Response shape:
     "maxHintLevel": 0,
     "nextLevel": 1,
     "exhausted": false
-  }
+  },
+  "moduleProgress": [
+    {
+      "moduleId": 1,
+      "moduleMastery": 50.0,
+      "moduleFriction": 25.0,
+      "attemptedTaskCount": 0,
+      "status": "active",
+      "exitReason": null,
+      "terminal": false,
+      "completedAt": null
+    }
+  ]
 }
 ```
+
+`moduleProgress` contains one entry for each of the seven modules; the example shows only the active entry.
 
 Frontend state to add:
 
@@ -218,6 +236,18 @@ Response includes:
     "maxHintLevel": 2,
     "revealedLevels": [1, 2]
   },
+  "moduleDecision": {
+    "moduleId": 1,
+    "outcome": "continue",
+    "attemptedTaskCount": 4,
+    "moduleMastery": 72.4,
+    "moduleFriction": 28.1,
+    "minimumAttempts": 6,
+    "recentMcqResults": [true, true],
+    "recentMcqCorrectCount": 2,
+    "masteryThresholdMet": false,
+    "nextModuleId": null
+  },
   "adaptation": {
     "direction": "increase",
     "targetDifficultyLevel": 2,
@@ -254,6 +284,8 @@ mixed signals -> hold difficulty
 ```
 
 Frontend should not decide adaptive difficulty itself.
+
+The first six tasks in each module are balanced between MCQ and code. Starting with attempt six, the backend may return `moduleDecision.outcome = "mastery_exit"` when module mastery is at least 75, friction is below 40, and at least two of the latest three MCQs are correct. Otherwise the learner continues, with `"bank_exhausted"` after all 15 tasks. Display this as a calm completion message; do not calculate module completion in React.
 
 The current Back/Forward buttons can remain as preview-only catalog browsing, but submissions must use the session's current backend-selected task. The primary learning flow should follow `nextTask` from `/api/learning/submissions/`. To begin a session from a previewed task, create a new session with that `taskId`.
 
@@ -345,6 +377,17 @@ Optional expandable details:
 
 Do not make the raw trace the main experience. The main UI should remain human-readable.
 
+### 3.7 Add Read-Only Attempt Review
+
+Load review material with:
+
+```text
+GET /api/learning/sessions/<sessionToken>/review/
+GET /api/learning/sessions/<sessionToken>/review/?moduleId=1
+```
+
+The response contains only skipped tasks and incorrect MCQs. Each item includes the learner answer, outcome, revealed hints, private explanation, and either the MCQ `correctChoice` or code `answerGuide`. Render these in a read-only review panel. Do not show a retry or submit action; the backend rejects repeat submissions.
+
 ## 4. Current Backend Data Fields Useful for UI
 
 Tasks now include:
@@ -369,7 +412,7 @@ Tasks now include:
 }
 ```
 
-Task responses never include `correctChoice`, `answerGuide`, or unrevealed `hints`. Do not calculate correctness in the frontend.
+Normal task responses never include `correctChoice`, `answerGuide`, `explanation`, or unrevealed `hints`. These fields appear only in eligible review items. Do not calculate correctness in the frontend.
 
 Frontend should display:
 
@@ -402,6 +445,7 @@ getModules()
 getTasks()
 createSession()
 getSession(sessionToken)
+getReview(sessionToken, moduleId)
 revealHint(payload)
 submitTask(payload)
 submitMicroSurvey(payload)
@@ -463,6 +507,8 @@ The frontend is ready when:
 
 - App creates or restores a backend learner session.
 - Hint requests reveal one persisted level at a time and restore after refresh.
+- Module progress uses `session.moduleProgress`; mastery exits and bank exhaustion use `response.moduleDecision`.
+- Skipped and incorrect attempts are available through a read-only review panel.
 - Submissions go to `/api/learning/submissions/`, not `/api/fuzzy/evaluate/`.
 - XAI panel still displays mastery, friction, focus state, recommendation, and support message.
 - UI follows `response.nextTask` after each submission.
@@ -506,6 +552,12 @@ curl -X POST http://localhost:8000/api/learning/submissions/ \
     "completionRatio": 1,
     "selectedChoice": "Adds an item to the end"
   }'
+```
+
+Review skipped and incorrect attempts:
+
+```bash
+curl http://localhost:8000/api/learning/sessions/SESSION_TOKEN_HERE/review/
 ```
 
 Submit micro-survey:

@@ -1,6 +1,7 @@
 from rest_framework import serializers
-from .catalog import TASK_BANK, get_task
+from .catalog import get_task
 from .models import LearnerSession
+from .progress import curriculum_complete
 
 # Serializers for the learning app
 class SessionCreateSerializer(serializers.Serializer):
@@ -50,7 +51,7 @@ class SessionSerializer(serializers.ModelSerializer):
         return obj.pending_survey_milestone() is not None
 
     def get_curriculumComplete(self, obj):
-        return obj.completed_task_count >= len(TASK_BANK)
+        return curriculum_complete(obj)
 
 # Serializer for task submission data
 class SubmissionSerializer(serializers.Serializer):
@@ -222,6 +223,12 @@ class TaskResponseSerializer(serializers.Serializer):
     starterCode = serializers.CharField(required=False, allow_blank=True)
 
 
+class ReviewTaskResponseSerializer(TaskResponseSerializer):
+    explanation = serializers.CharField()
+    correctChoice = serializers.CharField(required=False)
+    answerGuide = serializers.CharField(required=False)
+
+
 class RevealedHintResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     level = serializers.IntegerField()
@@ -243,6 +250,32 @@ class HintStateResponseSerializer(serializers.Serializer):
 class HintRevealResponseSerializer(serializers.Serializer):
     hint = RevealedHintResponseSerializer()
     hintState = HintStateResponseSerializer()
+
+
+class ReviewItemResponseSerializer(serializers.Serializer):
+    submissionId = serializers.IntegerField()
+    moduleId = serializers.IntegerField()
+    outcome = serializers.ChoiceField(choices=("skipped", "incorrect"))
+    learnerAnswer = serializers.DictField()
+    task = ReviewTaskResponseSerializer()
+    revealedHints = RevealedHintResponseSerializer(many=True)
+    submittedAt = serializers.DateTimeField()
+
+
+class ReviewResponseSerializer(serializers.Serializer):
+    items = ReviewItemResponseSerializer(many=True)
+    count = serializers.IntegerField()
+
+
+class ModuleProgressResponseSerializer(serializers.Serializer):
+    moduleId = serializers.IntegerField()
+    moduleMastery = serializers.FloatField()
+    moduleFriction = serializers.FloatField()
+    attemptedTaskCount = serializers.IntegerField()
+    status = serializers.CharField()
+    exitReason = serializers.CharField(allow_null=True)
+    terminal = serializers.BooleanField()
+    completedAt = serializers.DateTimeField(allow_null=True)
 
 
 # Serializer for task navigation response data
@@ -271,6 +304,7 @@ class SessionStateResponseSerializer(serializers.Serializer):
     curriculumComplete = serializers.BooleanField()
     currentTask = TaskResponseSerializer(allow_null=True)
     hintState = HintStateResponseSerializer()
+    moduleProgress = ModuleProgressResponseSerializer(many=True)
 
 # Serializer for the current session task response data
 class CurrentSessionTaskResponseSerializer(serializers.Serializer):
@@ -300,6 +334,21 @@ class HintUsageResponseSerializer(serializers.Serializer):
     revealedLevels = serializers.ListField(child=serializers.IntegerField())
 
 
+class ModuleDecisionResponseSerializer(serializers.Serializer):
+    moduleId = serializers.IntegerField()
+    outcome = serializers.CharField()
+    attemptedTaskCount = serializers.IntegerField()
+    moduleMastery = serializers.FloatField()
+    moduleFriction = serializers.FloatField()
+    minimumAttempts = serializers.IntegerField()
+    recentMcqResults = serializers.ListField(
+        child=serializers.BooleanField(allow_null=True)
+    )
+    recentMcqCorrectCount = serializers.IntegerField()
+    masteryThresholdMet = serializers.BooleanField()
+    nextModuleId = serializers.IntegerField(allow_null=True)
+
+
 # Serializer for submission response data
 class SubmissionResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
@@ -313,6 +362,7 @@ class SubmissionResponseSerializer(serializers.Serializer):
     session = SessionStateResponseSerializer()
     nextTask = TaskResponseSerializer()
     adaptation = AdaptationResponseSerializer()
+    moduleDecision = ModuleDecisionResponseSerializer()
     hintUsage = HintUsageResponseSerializer()
     surveyDue = serializers.BooleanField()
 
@@ -337,6 +387,9 @@ class TrainingDataRowSerializer(serializers.Serializer):
     difficultyLevel = serializers.IntegerField()
     taskMetricWeight = serializers.FloatField()
     historicalGradeAverage = serializers.FloatField(allow_null=True)
+    moduleMasteryBefore = serializers.FloatField()
+    moduleFrictionBefore = serializers.FloatField()
+    moduleExitOutcome = serializers.CharField()
     relativeResponseTime = serializers.FloatField()
     assistanceInteractions = serializers.IntegerField()
     maxHintLevel = serializers.IntegerField()

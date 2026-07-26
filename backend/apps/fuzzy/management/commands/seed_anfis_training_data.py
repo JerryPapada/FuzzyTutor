@@ -75,6 +75,8 @@ class Command(BaseCommand):
                 elapsed_time_seconds=elapsed,
                 relative_response_time=row["relativeResponseTime"],
                 assistance_interactions=row["assistanceInteractions"],
+                module_mastery_before=row["historicalGradeAverage"],
+                module_friction_before=25.0,
                 completion_ratio=row["completionRatio"],
                 is_correct=row["isCorrect"],
                 answer_payload={
