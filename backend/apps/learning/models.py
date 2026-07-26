@@ -49,6 +49,7 @@ class TaskSubmission(models.Model):
     elapsed_time_seconds = models.FloatField()
     relative_response_time = models.FloatField()
     assistance_interactions = models.PositiveIntegerField(default=0)
+    max_hint_level = models.PositiveSmallIntegerField(default=0)
     completion_ratio = models.FloatField(default=1.0)
     is_correct = models.BooleanField(null=True, blank=True)
     answer_payload = models.JSONField(default=dict, blank=True)
@@ -60,6 +61,45 @@ class TaskSubmission(models.Model):
             models.Index(fields=["session", "created_at"]),
             models.Index(fields=["task_id"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(max_hint_level__gte=0, max_hint_level__lte=3),
+                name="submission_hint_level_between_zero_and_three",
+            ),
+        ]
+
+
+# Immutable record of each progressive hint revealed during the current task.
+class HintEvent(models.Model):
+    session = models.ForeignKey(
+        LearnerSession,
+        related_name="hint_events",
+        on_delete=models.CASCADE,
+    )
+    task_id = models.CharField(max_length=80)
+    level = models.PositiveSmallIntegerField()
+    kind = models.CharField(max_length=30)
+    label = models.CharField(max_length=50)
+    text = models.TextField()
+    elapsed_time_seconds = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["level", "created_at"]
+        indexes = [
+            models.Index(fields=["session", "task_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "task_id", "level"],
+                name="unique_session_task_hint_level",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(level__gte=1, level__lte=3),
+                name="hint_level_between_one_and_three",
+            ),
+        ]
+
 
 # Fuzzy evaluation log model to store fuzzy engine results
 class FuzzyEvaluationLog(models.Model):

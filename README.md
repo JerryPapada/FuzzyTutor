@@ -23,13 +23,14 @@ Services:
 
 - Create or restore an anonymous learner session through `/api/learning/sessions/`.
 - Load the seven-module task catalog through `/api/learning/modules/` and `/api/learning/tasks/`.
+- Reveal up to three progressive, server-persisted hints through `/api/learning/hints/`.
 - Submit the backend-selected task through `/api/learning/submissions/`.
 - Use the returned ANFIS mastery, Mamdani cognitive-friction, explanation, and adapted `nextTask`.
 - Submit the persistent micro-survey requested at each unanswered five-task milestone.
 
 Interactive API documentation is available at `http://localhost:8000/api/docs/`.
 
-Public task payloads intentionally omit MCQ answer keys and code answer guides. MCQ correctness is derived by the backend. Code tasks are not graded; their model signals come from completion, timing, and assistance behavior.
+Public task payloads intentionally omit MCQ answer keys, code answer guides, and unrevealed hints. Hint usage and MCQ correctness are derived by the backend. Code tasks are not graded; their model signals come from completion, timing, and server-recorded assistance behavior.
 
 ## Fuzzy Models
 

@@ -1,8 +1,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .catalog import get_task
-from .models import LearnerSession, TaskSubmission
+from .catalog import TASK_BANK, get_task
+from .models import HintEvent, LearnerSession, TaskSubmission
 
 
 class LearningApiTests(TestCase):
@@ -21,7 +21,6 @@ class LearningApiTests(TestCase):
             "sessionToken": token,
             "taskId": task["id"],
             "elapsedTimeSeconds": task["baselineTimeSeconds"],
-            "assistanceInteractions": 0,
             "completionRatio": 1.0,
         }
         if task["type"] == "mcq":
@@ -39,6 +38,96 @@ class LearningApiTests(TestCase):
         for task in response.json()["tasks"]:
             self.assertNotIn("correctChoice", task)
             self.assertNotIn("answerGuide", task)
+            self.assertNotIn("hints", task)
+
+    def test_every_task_has_three_distinct_progressive_hints(self):
+        for task in TASK_BANK:
+            hints = task["hints"]
+            self.assertEqual([hint["level"] for hint in hints], [1, 2, 3])
+            self.assertEqual(
+                [hint["kind"] for hint in hints],
+                ["conceptual", "strategy", "scaffold"],
+            )
+            self.assertEqual(len({hint["text"] for hint in hints}), 3)
+
+    def test_hints_reveal_progressively_and_restore_with_session(self):
+        state = self.create_session()
+        payload = {
+            "sessionToken": state["sessionToken"],
+            "taskId": state["currentTaskId"],
+            "elapsedTimeSeconds": 12,
+        }
+
+        for expected_level, expected_kind in (
+            (1, "conceptual"),
+            (2, "strategy"),
+            (3, "scaffold"),
+        ):
+            response = self.client.post("/api/learning/hints/", payload, format="json")
+            self.assertEqual(response.status_code, 201, response.json())
+            self.assertEqual(response.json()["hint"]["level"], expected_level)
+            self.assertEqual(response.json()["hint"]["kind"], expected_kind)
+            self.assertEqual(
+                response.json()["hintState"]["assistanceInteractions"],
+                expected_level,
+            )
+
+        restored = self.client.get(
+            f"/api/learning/sessions/{state['sessionToken']}/"
+        ).json()
+        self.assertEqual(
+            [hint["level"] for hint in restored["hintState"]["revealedHints"]],
+            [1, 2, 3],
+        )
+        self.assertTrue(restored["hintState"]["exhausted"])
+        self.assertIsNone(restored["hintState"]["nextLevel"])
+        self.assertEqual(
+            self.client.post("/api/learning/hints/", payload, format="json").status_code,
+            400,
+        )
+
+    def test_hints_are_restricted_to_the_current_task(self):
+        state = self.create_session()
+        response = self.client.post(
+            "/api/learning/hints/",
+            {
+                "sessionToken": state["sessionToken"],
+                "taskId": "arrays-mcq-001",
+                "elapsedTimeSeconds": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(HintEvent.objects.count(), 0)
+
+    def test_submission_derives_assistance_from_recorded_hints(self):
+        state = self.create_session()
+        for elapsed in (10, 20):
+            response = self.client.post(
+                "/api/learning/hints/",
+                {
+                    "sessionToken": state["sessionToken"],
+                    "taskId": state["currentTaskId"],
+                    "elapsedTimeSeconds": elapsed,
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+
+        result = self.submit_current_task(state["sessionToken"])
+        submission = TaskSubmission.objects.get(pk=result["submissionId"])
+        self.assertEqual(submission.assistance_interactions, 2)
+        self.assertEqual(submission.max_hint_level, 2)
+        self.assertEqual(result["inputSnapshot"]["assistanceInteractions"], 2)
+        self.assertEqual(
+            result["hintUsage"],
+            {
+                "assistanceInteractions": 2,
+                "maxHintLevel": 2,
+                "revealedLevels": [1, 2],
+            },
+        )
 
     def test_invalid_module_queries_return_400(self):
         self.assertEqual(self.client.get("/api/learning/tasks/?moduleId=999").status_code, 400)
@@ -64,6 +153,13 @@ class LearningApiTests(TestCase):
         )
 
         base_payload.pop("isCorrect")
+        base_payload["assistanceInteractions"] = 3
+        self.assertEqual(
+            self.client.post("/api/learning/submissions/", base_payload, format="json").status_code,
+            400,
+        )
+
+        base_payload.pop("assistanceInteractions")
         base_payload["taskId"] = "arrays-mcq-001"
         self.assertEqual(
             self.client.post("/api/learning/submissions/", base_payload, format="json").status_code,

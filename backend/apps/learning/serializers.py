@@ -58,7 +58,6 @@ class SubmissionSerializer(serializers.Serializer):
     taskId = serializers.CharField()
     elapsedTimeSeconds = serializers.FloatField(min_value=0.1)
     skipped = serializers.BooleanField(default=False)
-    assistanceInteractions = serializers.IntegerField(default=0, min_value=0)
     completionRatio = serializers.FloatField(default=1.0, min_value=0.0, max_value=1.0)
     selectedChoice = serializers.CharField(required=False, allow_blank=True)
     answerText = serializers.CharField(required=False, allow_blank=True)
@@ -68,6 +67,14 @@ class SubmissionSerializer(serializers.Serializer):
         if "isCorrect" in self.initial_data:
             raise serializers.ValidationError(
                 {"isCorrect": "Correctness is derived by the backend and must not be supplied."}
+            )
+        if "assistanceInteractions" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "assistanceInteractions": (
+                        "Assistance is derived from server-recorded hint events and must not be supplied."
+                    )
+                }
             )
         try:
             attrs["session"] = LearnerSession.objects.select_for_update().get(
@@ -96,6 +103,54 @@ class SubmissionSerializer(serializers.Serializer):
             attrs.pop("answerText", None)
         attrs["task"] = task
         return attrs
+
+
+class HintRequestSerializer(serializers.Serializer):
+    sessionToken = serializers.CharField()
+    taskId = serializers.CharField()
+    elapsedTimeSeconds = serializers.FloatField(min_value=0.0)
+
+    def validate(self, attrs):
+        try:
+            session = LearnerSession.objects.select_for_update().get(
+                token=attrs["sessionToken"]
+            )
+        except LearnerSession.DoesNotExist:
+            raise serializers.ValidationError({"sessionToken": "Unknown session token."})
+
+        task = get_task(attrs["taskId"])
+        if task is None:
+            raise serializers.ValidationError({"taskId": "Unknown task id."})
+        if task["id"] != session.current_task_id:
+            raise serializers.ValidationError(
+                {"taskId": "Hints are only available for the current backend-selected task."}
+            )
+        if session.submissions.filter(task_id=task["id"]).exists():
+            raise serializers.ValidationError(
+                {"taskId": "Hints are unavailable after a task has been completed."}
+            )
+
+        revealed_levels = set(
+            session.hint_events.filter(task_id=task["id"]).values_list("level", flat=True)
+        )
+        next_level = next(
+            (
+                hint["level"]
+                for hint in task["hints"]
+                if hint["level"] not in revealed_levels
+            ),
+            None,
+        )
+        if next_level is None:
+            raise serializers.ValidationError(
+                {"taskId": "All three hint levels have already been revealed."}
+            )
+
+        attrs["session"] = session
+        attrs["task"] = task
+        attrs["hint"] = task["hints"][next_level - 1]
+        return attrs
+
 
 # Serializer for micro-survey responses
 class MicroSurveySerializer(serializers.Serializer):
@@ -126,6 +181,9 @@ class ErrorResponseSerializer(serializers.Serializer):
     detail = serializers.CharField(required=False)
     moduleId = serializers.CharField(required=False)
     direction = serializers.CharField(required=False)
+    sessionToken = serializers.CharField(required=False)
+    taskId = serializers.CharField(required=False)
+    assistanceInteractions = serializers.CharField(required=False)
 
 # Serializer for difficulty counts in a module
 class DifficultyCountsSerializer(serializers.Serializer):
@@ -163,6 +221,30 @@ class TaskResponseSerializer(serializers.Serializer):
     choices = serializers.ListField(child=serializers.CharField(), required=False)
     starterCode = serializers.CharField(required=False, allow_blank=True)
 
+
+class RevealedHintResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    level = serializers.IntegerField()
+    kind = serializers.CharField()
+    label = serializers.CharField()
+    text = serializers.CharField()
+    elapsedTimeSeconds = serializers.FloatField()
+    revealedAt = serializers.DateTimeField()
+
+
+class HintStateResponseSerializer(serializers.Serializer):
+    revealedHints = RevealedHintResponseSerializer(many=True)
+    assistanceInteractions = serializers.IntegerField()
+    maxHintLevel = serializers.IntegerField()
+    nextLevel = serializers.IntegerField(allow_null=True)
+    exhausted = serializers.BooleanField()
+
+
+class HintRevealResponseSerializer(serializers.Serializer):
+    hint = RevealedHintResponseSerializer()
+    hintState = HintStateResponseSerializer()
+
+
 # Serializer for task navigation response data
 class TaskNavigationResponseSerializer(serializers.Serializer):
     task = TaskResponseSerializer(allow_null=True)
@@ -188,6 +270,7 @@ class SessionStateResponseSerializer(serializers.Serializer):
     surveyDue = serializers.BooleanField()
     curriculumComplete = serializers.BooleanField()
     currentTask = TaskResponseSerializer(allow_null=True)
+    hintState = HintStateResponseSerializer()
 
 # Serializer for the current session task response data
 class CurrentSessionTaskResponseSerializer(serializers.Serializer):
@@ -210,6 +293,13 @@ class AdaptationResponseSerializer(serializers.Serializer):
     reason = serializers.CharField()
     signals = AdaptationSignalsResponseSerializer()
 
+
+class HintUsageResponseSerializer(serializers.Serializer):
+    assistanceInteractions = serializers.IntegerField()
+    maxHintLevel = serializers.IntegerField()
+    revealedLevels = serializers.ListField(child=serializers.IntegerField())
+
+
 # Serializer for submission response data
 class SubmissionResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
@@ -223,6 +313,7 @@ class SubmissionResponseSerializer(serializers.Serializer):
     session = SessionStateResponseSerializer()
     nextTask = TaskResponseSerializer()
     adaptation = AdaptationResponseSerializer()
+    hintUsage = HintUsageResponseSerializer()
     surveyDue = serializers.BooleanField()
 
 # Serializer for micro-survey response data
@@ -248,6 +339,8 @@ class TrainingDataRowSerializer(serializers.Serializer):
     historicalGradeAverage = serializers.FloatField(allow_null=True)
     relativeResponseTime = serializers.FloatField()
     assistanceInteractions = serializers.IntegerField()
+    maxHintLevel = serializers.IntegerField()
+    revealedHintLevels = serializers.ListField(child=serializers.IntegerField())
     completionRatio = serializers.FloatField()
     isCorrect = serializers.BooleanField(allow_null=True)
     knowledgeMastery = serializers.FloatField()

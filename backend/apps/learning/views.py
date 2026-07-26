@@ -18,10 +18,18 @@ from .catalog import (
     task_index,
     tasks_for_module,
 )
-from .models import FuzzyEvaluationLog, LearnerSession, MicroSurveyResponse, TaskSubmission
+from .models import (
+    FuzzyEvaluationLog,
+    HintEvent,
+    LearnerSession,
+    MicroSurveyResponse,
+    TaskSubmission,
+)
 from .serializers import (
     CurrentSessionTaskResponseSerializer,
     ErrorResponseSerializer,
+    HintRequestSerializer,
+    HintRevealResponseSerializer,
     MicroSurveyResponseSerializer,
     MicroSurveySerializer,
     ModulesResponseSerializer,
@@ -36,9 +44,57 @@ from .serializers import (
 )
 
 # Helper functions for serializing session and submission data
+def hint_event_payload(event):
+    return {
+        "id": event.id,
+        "level": event.level,
+        "kind": event.kind,
+        "label": event.label,
+        "text": event.text,
+        "elapsedTimeSeconds": event.elapsed_time_seconds,
+        "revealedAt": event.created_at.isoformat(),
+    }
+
+
+def hint_state_payload(session, task_id=None):
+    task = get_task(task_id or session.current_task_id)
+    if task is None:
+        return {
+            "revealedHints": [],
+            "assistanceInteractions": 0,
+            "maxHintLevel": 0,
+            "nextLevel": None,
+            "exhausted": True,
+        }
+
+    events = list(
+        session.hint_events.filter(task_id=task["id"]).order_by("level", "created_at")
+    )
+    revealed_levels = {event.level for event in events}
+    task_completed = session.submissions.filter(task_id=task["id"]).exists()
+    next_level = None
+    if not task_completed:
+        next_level = next(
+            (
+                hint["level"]
+                for hint in task["hints"]
+                if hint["level"] not in revealed_levels
+            ),
+            None,
+        )
+    return {
+        "revealedHints": [hint_event_payload(event) for event in events],
+        "assistanceInteractions": len(events),
+        "maxHintLevel": max(revealed_levels, default=0),
+        "nextLevel": next_level,
+        "exhausted": next_level is None,
+    }
+
+
 def session_payload(session):
     payload = SessionSerializer(session).data
     payload["currentTask"] = public_task_payload(get_task(session.current_task_id))
+    payload["hintState"] = hint_state_payload(session)
     return payload
 
 
@@ -239,6 +295,45 @@ def session_detail(request, session_token):
 
 @extend_schema(
     tags=["learning"],
+    summary="Reveal the next progressive task hint",
+    description=(
+        "Reveals and persists exactly one new hint for the current session task. "
+        "Hints progress from conceptual cue to strategy to scaffold. Previously "
+        "revealed hints are returned as restorable state, while unrevealed hints "
+        "remain private."
+    ),
+    request=HintRequestSerializer,
+    responses={201: HintRevealResponseSerializer, 400: ErrorResponseSerializer},
+)
+@api_view(["POST"])
+@transaction.atomic
+def hints(request):
+    serializer = HintRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    hint = data["hint"]
+    event = HintEvent.objects.create(
+        session=data["session"],
+        task_id=data["task"]["id"],
+        level=hint["level"],
+        kind=hint["kind"],
+        label=hint["label"],
+        text=hint["text"],
+        elapsed_time_seconds=data["elapsedTimeSeconds"],
+    )
+    return Response(
+        {
+            "hint": hint_event_payload(event),
+            "hintState": hint_state_payload(data["session"], data["task"]["id"]),
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@extend_schema(
+    tags=["learning"],
     summary="Submit a task response",
     description=(
         "Persists a task submission or explicit skip, derives fuzzy inputs from task metadata, runs the "
@@ -261,12 +356,19 @@ def submissions(request):
     elapsed = data["elapsedTimeSeconds"]
     relative_time = elapsed / max(1, task["baselineTimeSeconds"])
     is_correct = correctness_signal(task, data)
+    revealed_hint_levels = list(
+        session.hint_events.filter(task_id=task["id"])
+        .order_by("level")
+        .values_list("level", flat=True)
+    )
+    assistance_interactions = len(revealed_hint_levels)
+    max_hint_level = max(revealed_hint_levels, default=0)
 
     fuzzy_inputs = {
         "taskMetricWeight": task["taskMetricWeight"],
         "historicalGradeAverage": session.aggregate_mastery,
         "relativeResponseTime": relative_time,
-        "assistanceInteractions": data["assistanceInteractions"],
+        "assistanceInteractions": assistance_interactions,
         "completionRatio": data["completionRatio"],
         "taskType": task["type"],
         "isCorrect": is_correct,
@@ -284,7 +386,8 @@ def submissions(request):
         baseline_time_seconds=task["baselineTimeSeconds"],
         elapsed_time_seconds=elapsed,
         relative_response_time=relative_time,
-        assistance_interactions=data["assistanceInteractions"],
+        assistance_interactions=assistance_interactions,
+        max_hint_level=max_hint_level,
         completion_ratio=data["completionRatio"],
         is_correct=is_correct,
         answer_payload=answer_payload(data),
@@ -316,6 +419,11 @@ def submissions(request):
             "session": session_payload(session),
             "nextTask": public_task_payload(adaptation_result["nextTask"]),
             "adaptation": adaptation_result["adaptation"],
+            "hintUsage": {
+                "assistanceInteractions": assistance_interactions,
+                "maxHintLevel": max_hint_level,
+                "revealedLevels": revealed_hint_levels,
+            },
             "surveyDue": survey_due(session),
         },
         status=status.HTTP_201_CREATED,
@@ -378,6 +486,11 @@ def training_data_export(request):
     for log in logs:
         submission = log.submission
         survey = submission.micro_surveys.order_by("-created_at").first()
+        revealed_hint_levels = list(
+            log.session.hint_events.filter(task_id=submission.task_id)
+            .order_by("level")
+            .values_list("level", flat=True)
+        )
         rows.append(
             {
                 "sessionToken": log.session.token,
@@ -390,6 +503,8 @@ def training_data_export(request):
                 "historicalGradeAverage": log.input_snapshot.get("historicalGradeAverage"),
                 "relativeResponseTime": submission.relative_response_time,
                 "assistanceInteractions": submission.assistance_interactions,
+                "maxHintLevel": submission.max_hint_level,
+                "revealedHintLevels": revealed_hint_levels,
                 "completionRatio": submission.completion_ratio,
                 "isCorrect": submission.is_correct,
                 "knowledgeMastery": log.knowledge_mastery,

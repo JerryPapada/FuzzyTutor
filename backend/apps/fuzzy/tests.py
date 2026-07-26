@@ -61,6 +61,13 @@ class MamdaniFrictionTests(SimpleTestCase):
         self.assertGreater(steady["aggregatedArea"], 0)
         self.assertGreater(stalled["aggregatedArea"], 0)
 
+    def test_three_hint_levels_reach_high_assistance_membership(self):
+        no_hints = infer_cognitive_friction(1.0, 0, 1.0, "mcq")
+        all_hints = infer_cognitive_friction(1.0, 3, 1.0, "mcq")
+
+        self.assertEqual(all_hints["memberships"]["assistance"]["high"], 1.0)
+        self.assertGreater(all_hints["score"], no_hints["score"])
+
 
 class AnfisTrainingCommandTests(TestCase):
     def test_seed_command_creates_synthetic_training_logs(self):

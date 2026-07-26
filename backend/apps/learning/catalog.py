@@ -16,6 +16,12 @@ DIFFICULTY_META = {
     },
 }
 
+HINT_LEVEL_META = {
+    1: {"kind": "conceptual", "label": "Conceptual cue"},
+    2: {"kind": "strategy", "label": "Strategy"},
+    3: {"kind": "scaffold", "label": "Scaffold"},
+}
+
 
 CURRICULUM_MODULES = [
     {
@@ -82,7 +88,14 @@ def task_definition(
     correct_choice=None,
     starter_code="",
     answer_guide="",
+    hints=None,
 ):
+    hint_texts = list(hints or [])
+    if len(hint_texts) != len(HINT_LEVEL_META):
+        raise ValueError(f"Task {task_id} must define exactly three hint levels.")
+    if any(not str(text).strip() for text in hint_texts):
+        raise ValueError(f"Task {task_id} contains an empty hint.")
+
     meta = DIFFICULTY_META[difficulty]
     payload = {
         "id": task_id,
@@ -100,6 +113,14 @@ def task_definition(
             "frictionFeature": "relativeResponseTime",
             "trainingValue": "captures difficulty, timing, completion, assistance, and correctness context",
         },
+        "hints": [
+            {
+                "level": level,
+                **HINT_LEVEL_META[level],
+                "text": str(text).strip(),
+            }
+            for level, text in enumerate(hint_texts, start=1)
+        ],
     }
     if task_type == "mcq":
         payload["choices"] = choices or []
@@ -121,6 +142,11 @@ TASK_BANK = [
         ["append", "mutation"],
         ["Adds an item to the end", "Deletes the last item", "Sorts the list", "Creates a new tuple"],
         "Adds an item to the end",
+        hints=[
+            "Think about whether append() mutates the existing list or creates a different collection.",
+            "After calling the method with one value, the list length grows by exactly one.",
+            "For items = [1, 2], items.append(3) makes items[-1] equal to 3.",
+        ],
     ),
     task_definition(
         "lists-code-001",
@@ -132,6 +158,11 @@ TASK_BANK = [
         ["list literal", "sequence"],
         starter_code="evens = []\n",
         answer_guide="Use a list literal or build it with a loop/comprehension.",
+        hints=[
+            "An even number is divisible by 2; include the requested endpoints 2 and 8.",
+            "You can write the four values directly or use range() with a step of 2.",
+            "A useful scaffold is evens = list(range(__, __, __)); remember that range's stop is exclusive.",
+        ],
     ),
     task_definition(
         "lists-code-002",
@@ -143,6 +174,11 @@ TASK_BANK = [
         ["iteration", "comprehension"],
         starter_code="squares = []\n",
         answer_guide="A loop or list comprehension can produce [1, 4, 9, 16, 25].",
+        hints=[
+            "The square of a number n is n * n.",
+            "Iterate from 1 through 5; if you use range(), its stop value is excluded.",
+            "Complete this scaffold: squares = [n * n for n in range(__, __)].",
+        ],
     ),
     task_definition(
         "arrays-mcq-001",
@@ -154,6 +190,11 @@ TASK_BANK = [
         ["memory layout", "indexing"],
         ["They use contiguous memory", "They always sort data", "They avoid indexes", "They duplicate values"],
         "They use contiguous memory",
+        hints=[
+            "Think about how an index can identify a physical position rather than searching each value.",
+            "With a predictable layout, an element address can be computed from a base address and an offset.",
+            "Choose the property that lets index i be located directly from fixed-size neighboring positions.",
+        ],
     ),
     task_definition(
         "arrays-code-001",
@@ -165,6 +206,11 @@ TASK_BANK = [
         ["array access", "indexing"],
         starter_code="values = []\n",
         answer_guide="Use values[0] after creating the list.",
+        hints=[
+            "Python sequences use zero-based indexing, so the first position has index 0.",
+            "Create the values in their stated order, then pass the indexed first element to print().",
+            "Complete the structure: values = [__, __, __] followed by print(values[__]).",
+        ],
     ),
     task_definition(
         "arrays-mcq-002",
@@ -176,6 +222,11 @@ TASK_BANK = [
         ["insertion cost", "memory shift"],
         ["Inserting at the front", "Reading by index", "Checking length", "Reading the last value"],
         "Inserting at the front",
+        hints=[
+            "Compare operations that only inspect existing data with operations that change element positions.",
+            "Making space near the beginning can require many later elements to move.",
+            "Choose the operation that may shift almost every existing element by one position.",
+        ],
     ),
     task_definition(
         "dicts-mcq-001",
@@ -187,6 +238,11 @@ TASK_BANK = [
         ["keys", "values"],
         ["Store key-value pairs", "Only store integers", "Build inheritance trees", "Measure execution time"],
         "Store key-value pairs",
+        hints=[
+            "A dictionary associates one piece of information with another for lookup.",
+            "Its entries are written as key: value and accessed through the key.",
+            "Choose the description of a mapping, rather than a restriction on one data type.",
+        ],
     ),
     task_definition(
         "dicts-code-001",
@@ -198,6 +254,11 @@ TASK_BANK = [
         ["dictionary access", "keys"],
         starter_code="student = {}\nresult = ''\n",
         answer_guide="Use student['name'] or student.get('name').",
+        hints=[
+            "Build the dictionary with the requested words as keys, then retrieve a value through its key.",
+            "A dictionary literal uses {key: value}; square brackets can then access a known key.",
+            "Use this shape: student = {'name': __, 'age': __} and result = student[__].",
+        ],
     ),
     task_definition(
         "dicts-code-002",
@@ -209,6 +270,11 @@ TASK_BANK = [
         ["aggregation", "hash lookup"],
         starter_code="words = ['a', 'b', 'a']\ncounts = {}\n",
         answer_guide="Loop over words and increment counts[word].",
+        hints=[
+            "Treat each word as a dictionary key and its number of appearances as the value.",
+            "For each word, read its current count with a default of zero, then add one.",
+            "Complete the loop body: counts[word] = counts.get(word, __) + __.",
+        ],
     ),
     task_definition(
         "classes-mcq-001",
@@ -220,6 +286,11 @@ TASK_BANK = [
         ["constructor", "object state"],
         ["Initializes object state", "Deletes the object", "Imports the module", "Creates a loop"],
         "Initializes object state",
+        hints=[
+            "Consider when __init__ runs in relation to creating an instance.",
+            "Its self parameter refers to the new object, allowing attributes to be assigned.",
+            "Choose the option describing preparation of the new object's stored data.",
+        ],
     ),
     task_definition(
         "classes-code-001",
@@ -231,6 +302,11 @@ TASK_BANK = [
         ["class", "instance attribute"],
         starter_code="class Person:\n    pass\n",
         answer_guide="Define __init__(self, name) and assign self.name = name.",
+        hints=[
+            "The constructor method receives the new instance as self plus the supplied name.",
+            "Store an instance attribute by assigning to self.name inside __init__.",
+            "Use this scaffold: def __init__(self, name): followed by self.name = __.",
+        ],
     ),
     task_definition(
         "classes-code-002",
@@ -242,6 +318,11 @@ TASK_BANK = [
         ["methods", "state"],
         starter_code="class Person:\n    def __init__(self, name):\n        self.name = name\n",
         answer_guide="Define greet(self) and return a string using self.name.",
+        hints=[
+            "An instance method can read the name already stored on self.",
+            "Define greet with self, then return a string formed from the greeting and self.name.",
+            "Complete: def greet(self): return 'Hello, ' + ____.",
+        ],
     ),
     task_definition(
         "inheritance-mcq-001",
@@ -253,6 +334,11 @@ TASK_BANK = [
         ["subclass", "parent class"],
         ["A class based on another class", "A loop inside a class", "A dictionary key", "A syntax error"],
         "A class based on another class",
+        hints=[
+            "Think about the relationship created when one class inherits from another.",
+            "The new class can reuse or specialize attributes and methods from its parent.",
+            "Choose the option describing a class derived from an existing class.",
+        ],
     ),
     task_definition(
         "inheritance-mcq-002",
@@ -264,6 +350,11 @@ TASK_BANK = [
         ["override", "polymorphism"],
         ["Overriding", "Indexing", "Hashing", "Slicing"],
         "Overriding",
+        hints=[
+            "The question asks about redefining inherited behavior in the child class.",
+            "This happens when the subclass declares a method with the same name as the parent's method.",
+            "Choose the object-oriented term for replacing an inherited method implementation.",
+        ],
     ),
     task_definition(
         "inheritance-code-001",
@@ -275,6 +366,11 @@ TASK_BANK = [
         ["inheritance", "override"],
         starter_code="class Animal:\n    def speak(self):\n        return 'sound'\n",
         answer_guide="Define class Dog(Animal) and override speak.",
+        hints=[
+            "Place the parent class name in parentheses after the subclass name.",
+            "Inside Dog, define a speak method with the same signature as Animal.speak.",
+            "Complete the scaffold: class Dog(__): def speak(self): return __.",
+        ],
     ),
     task_definition(
         "exceptions-mcq-001",
@@ -286,6 +382,11 @@ TASK_BANK = [
         ["finally", "control flow"],
         ["finally", "if", "else", "break"],
         "finally",
+        hints=[
+            "Look for the exception-handling block intended for cleanup work.",
+            "This block is entered after try/except processing whether an exception was raised or not.",
+            "Choose the keyword paired with try/except that guarantees cleanup execution.",
+        ],
     ),
     task_definition(
         "exceptions-code-001",
@@ -297,6 +398,11 @@ TASK_BANK = [
         ["try", "except"],
         starter_code="def read_name(path):\n    pass\n",
         answer_guide="Catch the error and return the fallback string.",
+        hints=[
+            "The operation that may fail belongs in try, while the fallback belongs in except.",
+            "Open and read the file inside try; return the requested fallback string from the handler.",
+            "Use this structure: try: return open(path).read(); except OSError: return ____.",
+        ],
     ),
     task_definition(
         "exceptions-code-002",
@@ -308,6 +414,11 @@ TASK_BANK = [
         ["raise", "validation"],
         starter_code="def validate_age(age):\n    pass\n",
         answer_guide="Use if age < 0: raise ValueError(...).",
+        hints=[
+            "Validate the invalid case before returning the ordinary result.",
+            "Use a comparison against zero and the raise statement to create ValueError.",
+            "Complete: if age < __: raise ValueError(...); return age.",
+        ],
     ),
     task_definition(
         "control-mcq-001",
@@ -319,6 +430,11 @@ TASK_BANK = [
         ["if", "branching"],
         ["if", "loop", "def", "return"],
         "if",
+        hints=[
+            "A conditional branch evaluates a Boolean expression before choosing a path.",
+            "In Python, the relevant statement is followed by a condition and a colon.",
+            "Choose the keyword used in the pattern: ___ condition:.",
+        ],
     ),
     task_definition(
         "control-code-001",
@@ -330,6 +446,11 @@ TASK_BANK = [
         ["for loop", "range"],
         starter_code="",
         answer_guide="Use range(1, 4).",
+        hints=[
+            "A for loop can consume the sequence of integers produced by range().",
+            "Start at 1 and use an exclusive stop one greater than the last number to print.",
+            "Complete: for number in range(__, __): print(number).",
+        ],
     ),
     task_definition(
         "control-code-002",
@@ -341,6 +462,11 @@ TASK_BANK = [
         ["filtering", "conditionals"],
         starter_code="numbers = [4, 12, 9, 18]\nresult = []\n",
         answer_guide="Use an if statement inside a loop.",
+        hints=[
+            "Visit every number, but append only those satisfying the threshold condition.",
+            "Put an if statement inside the loop and compare each number with 10.",
+            "Complete: for number in numbers: if number > __: result.append(__).",
+        ],
     ),
 ]
 
@@ -352,7 +478,7 @@ def public_task_payload(task):
     return {
         key: value
         for key, value in task.items()
-        if key not in {"correctChoice", "answerGuide"}
+        if key not in {"correctChoice", "answerGuide", "hints"}
     }
 
 

@@ -75,7 +75,9 @@ The backend is separated into three Django applications:
 
 `LearnerSession` stores the anonymous session token, current module/task, rolling mastery/friction aggregates, completed-task count, and latest recommendation.
 
-`TaskSubmission` stores task metadata at the moment of submission, elapsed and relative response time, assistance count, completion ratio, backend-derived MCQ correctness, and the answer payload. Code-task correctness remains null because code is not automatically graded.
+`TaskSubmission` stores task metadata at the moment of submission, elapsed and relative response time, server-derived assistance count, maximum revealed hint level, completion ratio, backend-derived MCQ correctness, and the answer payload. Code-task correctness remains null because code is not automatically graded.
+
+`HintEvent` stores each immutable progressive hint reveal with its session, task, level, hint type, content snapshot, and elapsed reveal time. A uniqueness constraint permits each of the three levels to be revealed only once per session task. Session restoration returns revealed hints but never exposes unrevealed hint content.
 
 `FuzzyEvaluationLog` stores a reproducible input snapshot, complete engine trace, both crisp outputs, focus state, recommendation, and support message.
 
@@ -92,6 +94,8 @@ The task bank contains three difficulty bands:
 | Advanced | 3 | 75 | High |
 
 Each of the seven modules contains MCQ and/or code-writing tasks. MCQ choices are returned to the browser, but the correct answer remains private on the backend. Code tasks return starter code but not an answer guide.
+
+Every task defines three private, distinct support levels: a conceptual cue, a strategy, and a scaffold. The hint endpoint reveals them sequentially and persists each reveal. Normal catalog and session task payloads contain no unrevealed hint content.
 
 Code submissions are deliberately not executed or graded. This prevents compiler/test feedback from becoming an additional anxiety signal. Instead, the models use completion ratio, normalized response time, assistance interactions, task challenge, and prior aggregate mastery. A code response is never stored as correct merely because it is non-empty.
 
@@ -189,8 +193,8 @@ The behavioral engine predicts System Cognitive Friction on [0,100]. It uses res
 | Relative response time | Normal | triangle (0.65, 1.00, 1.45) |
 | Relative response time | High | right shoulder (1.15, 2.10) |
 | Assistance | Low | left shoulder (0.0, 1.5) |
-| Assistance | Medium | triangle (0.5, 2.0, 3.5) |
-| Assistance | High | right shoulder (2.5, 5.0) |
+| Assistance | Medium | triangle (0.5, 2.0, 3.0) |
+| Assistance | High | right shoulder (2.0, 3.0) |
 | Completion | Incomplete | left shoulder (0.15, 0.55) |
 | Completion | Partial | triangle (0.25, 0.60, 0.95) |
 | Completion | Complete | right shoulder (0.70, 1.00) |
@@ -208,8 +212,8 @@ The output linguistic sets are:
 
 1. Low time pressure AND low assistance AND complete → low friction.
 2. Normal time AND complete → low friction.
-3. (Normal time AND medium assistance) OR (high time AND complete) → moderate friction.
-4. Partial completion AND (normal time OR medium assistance) → moderate friction.
+3. (Normal time AND medium-or-high assistance) OR (high time AND complete) → moderate friction.
+4. Partial completion AND (normal time OR medium-or-high assistance) → moderate friction.
 5. High time AND (medium assistance OR high assistance) → high friction.
 6. (Incomplete AND high time) OR (incomplete AND high assistance) → severe friction.
 7. A code workspace activates moderate friction at strength 0.35 to represent its additional interaction load without treating it as failure.
@@ -269,6 +273,7 @@ Because no live study has yet been conducted, this report makes no fabricated cl
 | `GET /api/learning/tasks/` | Public, answer-safe task catalog |
 | `POST /api/learning/sessions/` | Create anonymous learning session |
 | `GET /api/learning/sessions/{token}/` | Restore session and pending survey state |
+| `POST /api/learning/hints/` | Reveal and persist the next progressive hint |
 | `POST /api/learning/submissions/` | Persist response, run both engines, adapt next task |
 | `POST /api/learning/micro-surveys/` | Save the currently due survey milestone |
 | `GET /api/learning/export/training-data/` | Export joined telemetry for assignment analysis |
@@ -292,11 +297,12 @@ The frontend and backend run in separate containers. Database migrations run whe
 
 1. Start or restore a learner session.
 2. Select the answer to an MCQ or write a response in the code editor.
-3. Submit the task. The code editor does not run automated tests.
-4. Read the mastery/friction gauges and the short support message.
-5. Continue with the backend-selected next task. The adaptation reason explains why its difficulty was chosen.
-6. After each five-task milestone, answer the satisfaction, perceived-difficulty, and confidence survey.
-7. Continue until the curriculum-complete state is reached.
+3. If support is needed, reveal a conceptual cue, then a strategy, then a scaffold. Each level is persistent and contributes to the assistance signal.
+4. Submit the task. The code editor does not run automated tests.
+5. Read the mastery/friction gauges and the short support message.
+6. Continue with the backend-selected next task. The adaptation reason explains why its difficulty was chosen.
+7. After each five-task milestone, answer the satisfaction, perceived-difficulty, and confidence survey.
+8. Continue until the curriculum-complete state is reached.
 
 If a page refresh occurs, the stored session token can be used to restore the current task, aggregates, completion count, and any unanswered survey milestone.
 
@@ -305,12 +311,13 @@ If a page refresh occurs, the stored session token can be used to restore the cu
 - Inspect engine inputs and active rules in the submission response's `engineTrace`.
 - Use the training-data export for tables and offline analysis.
 - Reproduce the synthetic model by running the seed, train, and evaluate management commands documented in the repository README.
-- Use Swagger to verify frontend payloads. The browser must never send `isCorrect`, `taskMetricWeight`, or private solution data during the session workflow.
+- Use Swagger to verify frontend payloads. The browser must never send `isCorrect`, `assistanceInteractions`, `taskMetricWeight`, or private solution data during the session workflow.
 
 # Verification and evaluation
 
 Automated backend verification includes:
 
+- private three-level task hints, sequential reveal, restoration, and server-derived assistance telemetry;
 - ANFIS strong/weak evidence and output-bound tests;
 - deterministic synthetic-row generation;
 - training-artifact creation and holdout metadata;

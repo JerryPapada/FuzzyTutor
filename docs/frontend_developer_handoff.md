@@ -42,6 +42,7 @@ The backend now supports:
 - Mamdani cognitive-friction model.
 - Trained ANFIS mastery model.
 - Backend next-task selection.
+- Three server-persisted progressive hint levels per task.
 - Micro-surveys every 5 submitted tasks.
 - Training-data export.
 - Swagger/OpenAPI docs.
@@ -60,6 +61,7 @@ Main backend workflow:
 POST /api/learning/sessions/
 GET  /api/learning/modules/
 GET  /api/learning/tasks/
+POST /api/learning/hints/
 POST /api/learning/submissions/
 POST /api/learning/micro-surveys/
 ```
@@ -99,6 +101,13 @@ Response shape:
     "taskMetricWeight": 35,
     "baselineTimeSeconds": 55,
     "prompt": "..."
+  },
+  "hintState": {
+    "revealedHints": [],
+    "assistanceInteractions": 0,
+    "maxHintLevel": 0,
+    "nextLevel": 1,
+    "exhausted": false
   }
 }
 ```
@@ -120,7 +129,30 @@ GET /api/learning/sessions/<sessionToken>/
 
 If that returns 404, create a new session.
 
-### 3.2 Replace Direct Fuzzy Evaluation With Submission Flow
+### 3.2 Reveal Progressive Hints
+
+The public task catalog never includes unrevealed hints. When the learner requests help, post:
+
+```http
+POST /api/learning/hints/
+Content-Type: application/json
+
+{
+  "sessionToken": "abc123",
+  "taskId": "lists-mcq-001",
+  "elapsedTimeSeconds": 24.5
+}
+```
+
+Each successful call reveals exactly one new level in order:
+
+1. `conceptual`
+2. `strategy`
+3. `scaffold`
+
+The response includes the newly revealed `hint` and the complete restorable `hintState`. Disable the hint button when `hintState.exhausted` is true. Session creation and restoration also return the current task's `hintState`.
+
+### 3.3 Replace Direct Fuzzy Evaluation With Submission Flow
 
 Current frontend behavior:
 
@@ -141,7 +173,6 @@ Payload:
   "sessionToken": "abc123",
   "taskId": "lists-mcq-001",
   "elapsedTimeSeconds": 42.5,
-  "assistanceInteractions": 0,
   "completionRatio": 1.0,
   "selectedChoice": "Adds an item to the end",
   "answerText": "",
@@ -150,6 +181,8 @@ Payload:
   }
 }
 ```
+
+Do not send `assistanceInteractions`. The backend derives it from persisted hint events and rejects client-supplied values.
 
 For MCQ:
 
@@ -180,6 +213,11 @@ Response includes:
   "submissionId": 1,
   "session": {},
   "nextTask": {},
+  "hintUsage": {
+    "assistanceInteractions": 2,
+    "maxHintLevel": 2,
+    "revealedLevels": [1, 2]
+  },
   "adaptation": {
     "direction": "increase",
     "targetDifficultyLevel": 2,
@@ -205,7 +243,7 @@ After submission:
 - Set the next active task from `response.nextTask`.
 - Reset timer and answer state for the new task.
 
-### 3.3 Use Backend-Selected Next Task
+### 3.4 Use Backend-Selected Next Task
 
 The backend now selects the next task according to model output:
 
@@ -232,7 +270,7 @@ Reason: High mastery with low friction supports a harder or equivalent task.
 
 Avoid exposing raw rule names as the main UI copy. They can be placed in an expandable "Model trace" section if needed.
 
-### 3.4 Add Micro-Survey UI Every 5 Tasks
+### 3.5 Add Micro-Survey UI Every 5 Tasks
 
 When `surveyDue` is true, show a compact modal or inline panel after the submission result. The backend keeps the oldest unanswered five-task milestone due across refreshes until a survey is accepted.
 
@@ -277,7 +315,7 @@ Difficulty
 Confidence
 ```
 
-### 3.5 Show Richer XAI Information
+### 3.6 Show Richer XAI Information
 
 Current XAI panel already shows the two main metrics.
 
@@ -331,7 +369,7 @@ Tasks now include:
 }
 ```
 
-Task responses never include `correctChoice` or `answerGuide`. Do not calculate correctness in the frontend.
+Task responses never include `correctChoice`, `answerGuide`, or unrevealed `hints`. Do not calculate correctness in the frontend.
 
 Frontend should display:
 
@@ -364,6 +402,7 @@ getModules()
 getTasks()
 createSession()
 getSession(sessionToken)
+revealHint(payload)
 submitTask(payload)
 submitMicroSurvey(payload)
 ```
@@ -391,7 +430,6 @@ Keep frontend-calculated:
 - elapsed time
 - selected choice
 - answer text
-- optional assistance interactions
 - completion ratio
 
 ### Step 4: Adapted Task Navigation
@@ -424,6 +462,7 @@ The response also returns `milestoneTaskCount` and the updated `surveyDue`. A du
 The frontend is ready when:
 
 - App creates or restores a backend learner session.
+- Hint requests reveal one persisted level at a time and restore after refresh.
 - Submissions go to `/api/learning/submissions/`, not `/api/fuzzy/evaluate/`.
 - XAI panel still displays mastery, friction, focus state, recommendation, and support message.
 - UI follows `response.nextTask` after each submission.
@@ -443,6 +482,18 @@ curl -X POST http://localhost:8000/api/learning/sessions/ \
   -d '{}'
 ```
 
+Reveal the next hint:
+
+```bash
+curl -X POST http://localhost:8000/api/learning/hints/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionToken": "SESSION_TOKEN_HERE",
+    "taskId": "lists-mcq-001",
+    "elapsedTimeSeconds": 24
+  }'
+```
+
 Submit MCQ:
 
 ```bash
@@ -452,7 +503,6 @@ curl -X POST http://localhost:8000/api/learning/submissions/ \
     "sessionToken": "SESSION_TOKEN_HERE",
     "taskId": "lists-mcq-001",
     "elapsedTimeSeconds": 40,
-    "assistanceInteractions": 0,
     "completionRatio": 1,
     "selectedChoice": "Adds an item to the end"
   }'

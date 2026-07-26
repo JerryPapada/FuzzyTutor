@@ -48,8 +48,8 @@ def memberships(relative_response_time, assistance_interactions, completion_rati
     }
     assistance = {
         "low": left_shoulder(assistance_interactions, 0.0, 1.5),
-        "medium": triangular(assistance_interactions, 0.5, 2.0, 3.5),
-        "high": right_shoulder(assistance_interactions, 2.5, 5.0),
+        "medium": triangular(assistance_interactions, 0.5, 2.0, 3.0),
+        "high": right_shoulder(assistance_interactions, 2.0, 3.0),
     }
     completion = {
         "incomplete": left_shoulder(completion_ratio, 0.15, 0.55),
@@ -94,14 +94,24 @@ def infer_cognitive_friction(
         (
             "minor_delay_or_hint",
             max(
-                min(time_pressure["normal"], assistance["medium"]),
+                min(
+                    time_pressure["normal"],
+                    max(assistance["medium"], assistance["high"]),
+                ),
                 min(time_pressure["high"], completion["complete"]),
             ),
             "moderate",
         ),
         (
             "partial_progress",
-            min(completion["partial"], max(time_pressure["normal"], assistance["medium"])),
+            min(
+                completion["partial"],
+                max(
+                    time_pressure["normal"],
+                    assistance["medium"],
+                    assistance["high"],
+                ),
+            ),
             "moderate",
         ),
         (
