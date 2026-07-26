@@ -63,3 +63,16 @@ export async function fetchSessionReview(token) {
   }
   return response.json();
 }
+
+export async function revealHint(data) {
+  const response = await fetch(`${API_URL}/learning/hints/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || `Hint request failed: ${response.status}`);
+  }
+  return response.json();
+}

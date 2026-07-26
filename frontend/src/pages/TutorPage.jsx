@@ -18,7 +18,7 @@ import StatCard from "../components/StatCard";
 import Header from "../components/Header";
 import useElapsedTimer from "../hooks/useElapsedTimer";
 import { fetchHealth } from "../services/healthService";
-import { fetchModules, fetchTasks, createSession, fetchSession, submitSubmission, submitMicroSurvey, fetchSessionReview } from "../services/learningService";
+import { fetchModules, fetchTasks, createSession, fetchSession, submitSubmission, submitMicroSurvey, fetchSessionReview, revealHint } from "../services/learningService";
 import "../pages-css/TutorPage.css";
 
 const RECOMMENDATION_LABELS = {
@@ -45,9 +45,36 @@ function TutorPage() {
   const [notificationMsg, setNotificationMsg] = useState("");
   const [showNotification, setShowNotification] = useState(false);
   const [surveyDue, setSurveyDue] = useState(false);
+  const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [satisfaction, setSatisfaction] = useState(5);
+  const [perceivedDifficulty, setPerceivedDifficulty] = useState(3);
+  const [confidence, setConfidence] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [submittingSurvey, setSubmittingSurvey] = useState(false);
+  const [showTrace, setShowTrace] = useState(false);
+  const [hintState, setHintState] = useState(null);
+  const [revealingHint, setRevealingHint] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      setHintState(session.hintState);
+    }
+  }, [session]);
   const [reviewItems, setReviewItems] = useState({});
   const [localAnswers, setLocalAnswers] = useState({});
   const notificationTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (surveyDue) {
+      setSatisfaction(5);
+      setPerceivedDifficulty(3);
+      setConfidence(5);
+      setFeedbackComment("");
+      setShowSurveyModal(true);
+    } else {
+      setShowSurveyModal(false);
+    }
+  }, [surveyDue]);
 
   function triggerNotification(message) {
     setNotificationMsg(message);
@@ -436,6 +463,62 @@ function TutorPage() {
     }
   }
 
+  async function handleSurveySubmit(e) {
+    if (e) e.preventDefault();
+    if (!sessionToken) return;
+
+    setSubmittingSurvey(true);
+    try {
+      const result = await submitMicroSurvey({
+        sessionToken,
+        satisfactionScore: satisfaction,
+        perceivedDifficulty: perceivedDifficulty,
+        confidenceScore: confidence,
+        comment: feedbackComment,
+      });
+
+      triggerNotification("Feedback submitted! Thank you.");
+      setSurveyDue(result.surveyDue);
+      setShowSurveyModal(false);
+
+      // Refresh the session state from backend
+      const updatedSession = await fetchSession(sessionToken);
+      setSession(updatedSession);
+      if (updatedSession.submittedTaskIds) {
+        setSubmittedTaskIds(updatedSession.submittedTaskIds);
+      }
+      if (updatedSession.skippedTaskIds) {
+        setSkippedTaskIds(updatedSession.skippedTaskIds);
+      }
+
+    } catch (error) {
+      console.error("Survey submission failed:", error);
+      triggerNotification(error.message || "Failed to submit survey.");
+    } finally {
+      setSubmittingSurvey(false);
+    }
+  }
+
+  async function requestHint() {
+    if (!activeTask || !sessionToken || revealingHint) return;
+
+    const responseTime = Math.max(0.1, (Date.now() - taskStartedAt.current) / 1000);
+    setRevealingHint(true);
+    try {
+      const result = await revealHint({
+        sessionToken,
+        taskId: activeTask.id,
+        elapsedTimeSeconds: responseTime,
+      });
+      setHintState(result.hintState);
+      triggerNotification("New hint revealed!");
+    } catch (err) {
+      console.error("Failed to reveal hint:", err);
+      triggerNotification(err.message || "Failed to reveal hint.");
+    } finally {
+      setRevealingHint(false);
+    }
+  }
   const progressLabel = activeTask ? `${activeTaskIndexInTimeline + 1} / ${timeline.length}` : "0 / 0";
   const canGoBack = activeTaskIndexInTimeline > 0;
   const canGoForward = activeTaskIndexInTimeline < timeline.length - 1;
@@ -635,6 +718,23 @@ function TutorPage() {
                 </div>
               )}
 
+              {/* Active task revealed hints */}
+              {!isReviewMode && hintState?.revealedHints && hintState.revealedHints.length > 0 && (
+                <div className="active-hints-panel">
+                  <h3 className="active-hints-title">Revealed Hints</h3>
+                  <div className="active-hints-content">
+                    <ul>
+                      {hintState.revealedHints.map((hint, idx) => (
+                        <li key={idx} className="hint-item-row">
+                          <strong className="hint-label-badge">{hint.label}:</strong>
+                          <span className="hint-text-val">{hint.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               {/* Read-Only Review Details */}
               {isReviewMode && reviewItems[activeTask.id] && (
                 <div className="review-panel">
@@ -682,10 +782,21 @@ function TutorPage() {
                     <ChevronRight size={16} />
                   </button>
                 ) : (
-                  <button type="button" onClick={skipTask} disabled={!activeTask || activeTaskIndex === moduleTasks.length - 1}>
-                    Skip
-                    <ChevronRight size={16} />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="hint-btn"
+                      onClick={requestHint}
+                      disabled={revealingHint || hintState?.exhausted}
+                    >
+                      <HelpCircle size={16} />
+                      {hintState?.exhausted ? "No hints left" : "Get Hint"}
+                    </button>
+                    <button type="button" onClick={skipTask} disabled={!activeTask || activeTaskIndex === moduleTasks.length - 1}>
+                      Skip
+                      <ChevronRight size={16} />
+                    </button>
+                  </>
                 )}
               </div>
               <button 
@@ -736,8 +847,182 @@ function TutorPage() {
             </p>
             <strong>{evaluation?.supportMessage ?? "Submit a response to see the fuzzy summary."}</strong>
           </div>
+
+          {(evaluation?.adaptation || evaluation?.inputSnapshot || evaluation?.engineTrace) && (
+            <div className="trace-section">
+              <button
+                type="button"
+                className="trace-toggle-btn"
+                onClick={() => setShowTrace(!showTrace)}
+              >
+                <span>Fuzzy Engine Details</span>
+                <span className="arrow">{showTrace ? "▲" : "▼"}</span>
+              </button>
+
+              {showTrace && (
+                <div className="trace-content">
+                  {evaluation?.adaptation && (
+                    <div className="adaptation-info" style={{ marginTop: 0 }}>
+                      <div className="adaptation-header">
+                        <h3>Adaptation</h3>
+                        <span className="difficulty-badge">
+                          {evaluation.adaptation.targetDifficulty?.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="adaptation-reason">
+                        {evaluation.adaptation.reason}
+                      </p>
+                    </div>
+                  )}
+
+                  {evaluation?.inputSnapshot && (
+                    <div className="telemetry-snapshot">
+                      <h3>Telemetry Inputs</h3>
+                      <div className="telemetry-grid">
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Task Weight</span>
+                          <span className="telemetry-value">{evaluation.inputSnapshot.taskMetricWeight}</span>
+                        </div>
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Prior Mastery</span>
+                          <span className="telemetry-value">{evaluation.inputSnapshot.historicalGradeAverage}%</span>
+                        </div>
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Rel. Time</span>
+                          <span className="telemetry-value">{evaluation.inputSnapshot.relativeResponseTime}x</span>
+                        </div>
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Hints Used</span>
+                          <span className="telemetry-value">{evaluation.inputSnapshot.assistanceInteractions}</span>
+                        </div>
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Completion</span>
+                          <span className="telemetry-value">{evaluation.inputSnapshot.completionRatio * 100}%</span>
+                        </div>
+                        <div className="telemetry-item">
+                          <span className="telemetry-label">Task Type</span>
+                          <span className="telemetry-value uppercase">{evaluation.inputSnapshot.taskType}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {evaluation.engineTrace.anfis?.rules && (
+                    <div className="engine-block">
+                      <h4>ANFIS Rules (Mastery)</h4>
+                      <div className="rules-list">
+                        {evaluation.engineTrace.anfis.rules.map((r, i) => (
+                          <div key={i} className="rule-item">
+                            <span className="rule-name">{r.rule}</span>
+                            <div className="rule-stats">
+                              <span className="rule-badge strength">Strength: {r.strength}</span>
+                              <span className="rule-badge consequent">Output: {r.output}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {evaluation.engineTrace.mamdani?.rules && (
+                    <div className="engine-block">
+                      <h4>Mamdani Rules (Friction)</h4>
+                      <div className="rules-list">
+                        {evaluation.engineTrace.mamdani.rules.map((r, i) => (
+                          <div key={i} className="rule-item">
+                            <span className="rule-name">{r.rule}</span>
+                            <div className="rule-stats">
+                              <span className="rule-badge strength">Strength: {r.strength}</span>
+                              <span className="rule-badge consequent">{r.consequent}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </aside>
       </section>
+
+      {showSurveyModal && (
+        <div className="survey-modal-overlay">
+          <div className="survey-modal-card">
+            <h2>Quick Feedback</h2>
+            <p>Help us calibrate your tutoring experience. How did you feel about the last 5 tasks?</p>
+            
+            <form onSubmit={handleSurveySubmit}>
+              <div className="survey-group">
+                <label>Overall Satisfaction</label>
+                <div className="rating-options">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`rating-btn ${satisfaction === val ? "active" : ""}`}
+                      onClick={() => setSatisfaction(val)}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="survey-group">
+                <label>Perceived Difficulty</label>
+                <div className="rating-options">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`rating-btn ${perceivedDifficulty === val ? "active" : ""}`}
+                      onClick={() => setPerceivedDifficulty(val)}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="survey-group">
+                <label>Your Confidence Level</label>
+                <div className="rating-options">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`rating-btn ${confidence === val ? "active" : ""}`}
+                      onClick={() => setConfidence(val)}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="survey-group">
+                <label>Additional Comments (Optional)</label>
+                <textarea
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  placeholder="Share any thoughts or suggestions..."
+                  rows={3}
+                />
+              </div>
+
+              <button
+                className="survey-submit-btn"
+                type="submit"
+                disabled={submittingSurvey}
+              >
+                {submittingSurvey ? "Submitting..." : "Submit & Continue"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
