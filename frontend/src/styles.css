@@ -318,22 +318,33 @@ h1 {
 }
 
 .task-footer {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  justify-content: stretch;
   gap: 16px;
   margin-top: 22px;
-  flex-wrap: wrap;
 }
 
 .task-footer-meta {
   gap: 8px;
   color: #4f6270;
   font-weight: 700;
+  justify-self: start;
+  grid-column: 1;
 }
 
 .task-navigation {
   gap: 10px;
-  flex: 1;
-  justify-content: center;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  grid-column: 2;
+}
+
+.primary-action {
+  justify-self: end;
+  grid-column: 3;
 }
 
 .task-navigation button,
@@ -383,6 +394,8 @@ h1 {
 .stat-card strong {
   font-size: 2rem;
   line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .stat-meter {

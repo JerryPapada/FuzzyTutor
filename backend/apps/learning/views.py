@@ -105,6 +105,19 @@ def session_payload(session):
     payload["currentTask"] = public_task_payload(get_task(session.current_task_id))
     payload["hintState"] = hint_state_payload(session)
     payload["moduleProgress"] = session_module_progress_payload(session)
+    
+    # Track submitted and skipped tasks for frontend state synchronization
+    submissions = list(TaskSubmission.objects.filter(session=session).order_by("created_at", "id"))
+    payload["submittedTaskIds"] = [sub.task_id for sub in submissions if not sub.answer_payload.get("skipped")]
+    payload["skippedTaskIds"] = [sub.task_id for sub in submissions if sub.answer_payload.get("skipped")]
+    payload["orderedAttempts"] = [
+        {
+            "taskId": sub.task_id,
+            "moduleId": sub.module_id,
+            "skipped": bool(sub.answer_payload.get("skipped"))
+        }
+        for sub in submissions
+    ]
     return payload
 
 

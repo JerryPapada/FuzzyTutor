@@ -303,6 +303,9 @@ class SessionStateResponseSerializer(serializers.Serializer):
     surveyDue = serializers.BooleanField()
     curriculumComplete = serializers.BooleanField()
     currentTask = TaskResponseSerializer(allow_null=True)
+    submittedTaskIds = serializers.ListField(child=serializers.CharField(), required=False)
+    skippedTaskIds = serializers.ListField(child=serializers.CharField(), required=False)
+    orderedAttempts = serializers.ListField(child=serializers.DictField(), required=False)
     hintState = HintStateResponseSerializer()
     moduleProgress = ModuleProgressResponseSerializer(many=True)
 
