@@ -60,3 +60,16 @@ export async function revealHint(data) {
   });
   return readJsonResponse(response, "Hint request failed");
 }
+
+export async function deleteSession(token) {
+  const response = await fetch(
+    `${API_URL}/learning/sessions/${encodeURIComponent(token)}/`,
+    {
+      method: "DELETE",
+    }
+  );
+  if (!response.ok && response.status !== 204) {
+    throw new Error("Session deletion failed");
+  }
+}
+

@@ -11,12 +11,68 @@
 }
 
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 340px;
+  gap: 32px;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 16px;
   margin-bottom: 24px;
+}
+
+.topbar-left {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.topbar-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.topbar-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 12px;
+  background: rgba(22, 27, 34, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  height: 42px;
+}
+
+.help-btn {
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  color: var(--primary-accent);
+}
+
+.help-btn:hover {
+  background: rgba(88, 166, 255, 0.12);
+  border-color: rgba(88, 166, 255, 0.45);
+  box-shadow: 0 0 15px rgba(88, 166, 255, 0.25);
+  color: #fff;
+}
+
+.reset-btn {
+  border: 1px solid rgba(210, 153, 34, 0.2);
+  color: var(--amber-accent);
+}
+
+.reset-btn:hover {
+  background: rgba(210, 153, 34, 0.12);
+  border-color: rgba(210, 153, 34, 0.45);
+  box-shadow: 0 0 15px rgba(210, 153, 34, 0.25);
+  color: #fff;
 }
 
 .eyebrow,
@@ -716,8 +772,23 @@
   }
 
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .topbar-left, .topbar-right {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .topbar-center {
+    order: -1;
+    flex: 1 1 100%;
+    margin-bottom: 12px;
   }
 
   .workspace,
@@ -1277,4 +1348,158 @@
 
 .hint-text-val {
   color: var(--text-main);
+}
+
+/* Custom Reset Modal Styles */
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.modal-btn {
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.cancel-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.confirm-btn {
+  background: #ea4335;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.confirm-btn:hover {
+  background: #ff5252;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(234, 67, 53, 0.35);
+}
+
+/* Custom Help Modal Styles */
+.help-modal-card {
+  max-width: 650px !important;
+  text-align: left !important;
+}
+
+.help-modal-card h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.help-modal-content {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 12px;
+  margin-bottom: 24px;
+}
+
+/* Custom scrollbar for premium look */
+.help-modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+.help-modal-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+}
+.help-modal-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+.help-modal-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.help-modal-section {
+  margin-bottom: 20px;
+}
+
+.help-modal-section h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary-accent);
+  margin-bottom: 8px;
+  border-left: 3px solid var(--primary-accent);
+  padding-left: 8px;
+}
+
+.help-modal-section p, .help-modal-section ul {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.help-modal-section ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.help-modal-section li {
+  margin-bottom: 8px;
+}
+
+.help-pill-badge {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.help-pill-badge.active {
+  background: var(--primary-accent);
+  box-shadow: 0 0 6px var(--primary-accent);
+}
+
+.help-pill-badge.submitted {
+  background: #1b5e20;
+  box-shadow: 0 0 6px #1b5e20;
+}
+
+.help-pill-badge.skipped {
+  background: #b35d00;
+  box-shadow: 0 0 6px #b35d00;
+}
+
+.help-pill-badge.unattempted {
+  background: var(--bg-panel-secondary);
+}
+
+.help-close-btn {
+  width: 100%;
+  min-height: 48px;
+  background: var(--primary-accent);
+  border: 0;
+  border-radius: 14px;
+  color: #000000;
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+}
+
+.help-close-btn:hover {
+  background: #79b8ff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(88, 166, 255, 0.35);
 }

@@ -324,18 +324,27 @@ def sessions(request):
 
 @extend_schema(
     tags=["learning"],
-    summary="Get learner session state",
+    summary="Get or delete learner session state",
     parameters=[
         OpenApiParameter("session_token", OpenApiTypes.STR, OpenApiParameter.PATH),
     ],
-    responses={200: SessionStateResponseSerializer, 404: ErrorResponseSerializer},
+    responses={
+        200: SessionStateResponseSerializer,
+        204: None,
+        404: ErrorResponseSerializer,
+    },
 )
-@api_view(["GET"])
+@api_view(["GET", "DELETE"])
 def session_detail(request, session_token):
     try:
         session = LearnerSession.objects.get(token=session_token)
     except LearnerSession.DoesNotExist:
         return Response({"detail": "Unknown session token."}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "DELETE":
+        session.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     return Response(session_payload(session))
 
 
