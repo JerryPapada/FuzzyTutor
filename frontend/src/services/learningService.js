@@ -1,13 +1,14 @@
 import API_URL from "../api/apiConfig";
+import { readJsonResponse } from "./apiResponse";
 
 export async function fetchModules() {
   const response = await fetch(`${API_URL}/learning/modules/`);
-  return response.json();
+  return readJsonResponse(response, "Module fetch failed");
 }
 
 export async function fetchTasks() {
   const response = await fetch(`${API_URL}/learning/tasks/`);
-  return response.json();
+  return readJsonResponse(response, "Task fetch failed");
 }
 
 export async function createSession() {
@@ -16,18 +17,14 @@ export async function createSession() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
-  if (!response.ok) {
-    throw new Error(`Session creation failed: ${response.status}`);
-  }
-  return response.json();
+  return readJsonResponse(response, "Session creation failed");
 }
 
 export async function fetchSession(token) {
-  const response = await fetch(`${API_URL}/learning/sessions/${token}/`);
-  if (!response.ok) {
-    throw new Error(`Session fetch failed: ${response.status}`);
-  }
-  return response.json();
+  const response = await fetch(
+    `${API_URL}/learning/sessions/${encodeURIComponent(token)}/`,
+  );
+  return readJsonResponse(response, "Session fetch failed");
 }
 
 export async function submitSubmission(data) {
@@ -36,11 +33,7 @@ export async function submitSubmission(data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.detail || `Submission failed: ${response.status}`);
-  }
-  return response.json();
+  return readJsonResponse(response, "Submission failed");
 }
 
 export async function submitMicroSurvey(data) {
@@ -49,19 +42,14 @@ export async function submitMicroSurvey(data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.detail || `Micro-survey failed: ${response.status}`);
-  }
-  return response.json();
+  return readJsonResponse(response, "Micro-survey failed");
 }
 
 export async function fetchSessionReview(token) {
-  const response = await fetch(`${API_URL}/learning/sessions/${token}/review/`);
-  if (!response.ok) {
-    throw new Error(`Session review fetch failed: ${response.status}`);
-  }
-  return response.json();
+  const response = await fetch(
+    `${API_URL}/learning/sessions/${encodeURIComponent(token)}/review/`,
+  );
+  return readJsonResponse(response, "Session review fetch failed");
 }
 
 export async function revealHint(data) {
@@ -70,9 +58,5 @@ export async function revealHint(data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.detail || `Hint request failed: ${response.status}`);
-  }
-  return response.json();
+  return readJsonResponse(response, "Hint request failed");
 }

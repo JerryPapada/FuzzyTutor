@@ -291,6 +291,18 @@ class TaskCatalogResponseSerializer(serializers.Serializer):
     tasks = TaskResponseSerializer(many=True)
     activeTask = TaskNavigationResponseSerializer()
 
+
+class OrderedAttemptResponseSerializer(serializers.Serializer):
+    taskId = serializers.CharField()
+    moduleId = serializers.IntegerField()
+    skipped = serializers.BooleanField()
+    outcome = serializers.ChoiceField(
+        choices=("correct", "incorrect", "completed", "skipped")
+    )
+    learnerAnswer = serializers.DictField()
+    submittedAt = serializers.DateTimeField()
+
+
 # Serializer for session state response data
 class SessionStateResponseSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
@@ -305,7 +317,7 @@ class SessionStateResponseSerializer(serializers.Serializer):
     currentTask = TaskResponseSerializer(allow_null=True)
     submittedTaskIds = serializers.ListField(child=serializers.CharField(), required=False)
     skippedTaskIds = serializers.ListField(child=serializers.CharField(), required=False)
-    orderedAttempts = serializers.ListField(child=serializers.DictField(), required=False)
+    orderedAttempts = OrderedAttemptResponseSerializer(many=True, required=False)
     hintState = HintStateResponseSerializer()
     moduleProgress = ModuleProgressResponseSerializer(many=True)
 

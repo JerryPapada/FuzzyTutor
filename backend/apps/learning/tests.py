@@ -433,6 +433,72 @@ class LearningApiTests(TestCase):
         ).json()
         self.assertEqual(review["count"], 0)
 
+    def test_session_history_restores_every_learner_response(self):
+        mcq_task = next(task for task in TASK_BANK if task["type"] == "mcq")
+        code_task = next(task for task in TASK_BANK if task["type"] == "code")
+        incorrect_choice = next(
+            choice
+            for choice in mcq_task["choices"]
+            if choice != mcq_task["correctChoice"]
+        )
+        cases = (
+            (
+                mcq_task,
+                {"selectedChoice": mcq_task["correctChoice"]},
+                "correct",
+                {"selectedChoice": mcq_task["correctChoice"]},
+            ),
+            (
+                mcq_task,
+                {"selectedChoice": incorrect_choice},
+                "incorrect",
+                {"selectedChoice": incorrect_choice},
+            ),
+            (
+                code_task,
+                {"answerText": "print('persisted code response')"},
+                "completed",
+                {"answerText": "print('persisted code response')"},
+            ),
+            (
+                mcq_task,
+                {"skipped": True},
+                "skipped",
+                {"skipped": True},
+            ),
+        )
+
+        for task, response_fields, expected_outcome, expected_answer in cases:
+            with self.subTest(task=task["id"], outcome=expected_outcome):
+                state = self.create_session(taskId=task["id"])
+                payload = {
+                    "sessionToken": state["sessionToken"],
+                    "taskId": task["id"],
+                    "elapsedTimeSeconds": 10,
+                    "completionRatio": 1,
+                    **response_fields,
+                }
+                submission = self.client.post(
+                    "/api/learning/submissions/",
+                    payload,
+                    format="json",
+                )
+                self.assertEqual(submission.status_code, 201, submission.json())
+
+                restored = self.client.get(
+                    f"/api/learning/sessions/{state['sessionToken']}/"
+                )
+                self.assertEqual(restored.status_code, 200)
+                attempt = restored.json()["orderedAttempts"][0]
+                self.assertEqual(attempt["taskId"], task["id"])
+                self.assertEqual(attempt["outcome"], expected_outcome)
+                self.assertEqual(attempt["learnerAnswer"], expected_answer)
+                self.assertTrue(attempt["submittedAt"])
+
+                # Attempt history restores the learner's response, not private solutions.
+                self.assertNotIn("correctChoice", attempt)
+                self.assertNotIn("answerGuide", attempt)
+
     def test_training_export_contains_module_progress_snapshots(self):
         state = self.create_session()
         result = self.submit_current_task(state["sessionToken"])

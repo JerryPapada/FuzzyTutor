@@ -218,10 +218,19 @@ function TutorPage() {
 
     const isReview = session && activeTask.id !== session.currentTaskId;
     if (isReview) {
-      const submittedVal = reviewItems[activeTask.id]?.learnerAnswer?.selectedChoice 
-        || reviewItems[activeTask.id]?.learnerAnswer?.answerText
-        || localAnswers[activeTask.id] 
-        || "";
+      const persistedAttempt = (session.orderedAttempts || []).find(
+        (attempt) => attempt.taskId === activeTask.id,
+      );
+      const learnerAnswer =
+        reviewItems[activeTask.id]?.learnerAnswer
+        ?? persistedAttempt?.learnerAnswer
+        ?? {};
+      const submittedVal =
+        (activeTask.type === "mcq"
+          ? learnerAnswer.selectedChoice
+          : learnerAnswer.answerText)
+        ?? localAnswers[activeTask.id]
+        ?? "";
       setSelectedChoice(activeTask.type === "mcq" ? submittedVal : "");
       setCodeAnswer(activeTask.type === "code" ? submittedVal : "");
     } else {
@@ -792,7 +801,7 @@ function TutorPage() {
                       <HelpCircle size={16} />
                       {hintState?.exhausted ? "No hints left" : "Get Hint"}
                     </button>
-                    <button type="button" onClick={skipTask} disabled={!activeTask || activeTaskIndex === moduleTasks.length - 1}>
+                    <button type="button" onClick={skipTask} disabled={!activeTask}>
                       Skip
                       <ChevronRight size={16} />
                     </button>
@@ -866,7 +875,7 @@ function TutorPage() {
                       <div className="adaptation-header">
                         <h3>Adaptation</h3>
                         <span className="difficulty-badge">
-                          {evaluation.adaptation.targetDifficulty?.toUpperCase()}
+                          {evaluation.adaptation.selectedDifficulty?.toUpperCase()}
                         </span>
                       </div>
                       <p className="adaptation-reason">
@@ -907,7 +916,7 @@ function TutorPage() {
                     </div>
                   )}
 
-                  {evaluation.engineTrace.anfis?.rules && (
+                  {evaluation?.engineTrace?.anfis?.rules && (
                     <div className="engine-block">
                       <h4>ANFIS Rules (Mastery)</h4>
                       <div className="rules-list">
@@ -924,7 +933,7 @@ function TutorPage() {
                     </div>
                   )}
 
-                  {evaluation.engineTrace.mamdani?.rules && (
+                  {evaluation?.engineTrace?.mamdani?.rules && (
                     <div className="engine-block">
                       <h4>Mamdani Rules (Friction)</h4>
                       <div className="rules-list">

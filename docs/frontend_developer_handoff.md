@@ -96,6 +96,9 @@ Response shape:
   "latestRecommendation": "hold_current_tier",
   "surveyDue": false,
   "curriculumComplete": false,
+  "submittedTaskIds": [],
+  "skippedTaskIds": [],
+  "orderedAttempts": [],
   "currentTask": {
     "id": "lists-mcq-001",
     "moduleId": 1,
@@ -128,7 +131,20 @@ Response shape:
 }
 ```
 
-`moduleProgress` contains one entry for each of the seven modules; the example shows only the active entry.
+`moduleProgress` contains one entry for each of the seven modules; the example shows only the active entry. `orderedAttempts` contains every persisted learner response in submission order, including correct MCQs and completed code tasks. It restores the learner's own answer after refresh but never exposes a private answer key. A populated item has this shape:
+
+```json
+{
+  "taskId": "lists-mcq-001",
+  "moduleId": 1,
+  "skipped": false,
+  "outcome": "correct",
+  "learnerAnswer": {
+    "selectedChoice": "Adds an item to the end"
+  },
+  "submittedAt": "2026-07-27T10:00:00+00:00"
+}
+```
 
 Frontend state to add:
 
