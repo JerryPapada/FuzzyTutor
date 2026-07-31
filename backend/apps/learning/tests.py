@@ -31,7 +31,6 @@ class LearningApiTests(TestCase):
             "sessionToken": token,
             "taskId": task["id"],
             "elapsedTimeSeconds": task["baselineTimeSeconds"],
-            "completionRatio": 1.0,
         }
         if skipped:
             payload["skipped"] = True
@@ -223,7 +222,6 @@ class LearningApiTests(TestCase):
             "sessionToken": state["sessionToken"],
             "taskId": state["currentTaskId"],
             "elapsedTimeSeconds": 10,
-            "completionRatio": 1,
             "selectedChoice": "Adds an item to the end",
             "isCorrect": True,
         }
@@ -240,11 +238,105 @@ class LearningApiTests(TestCase):
         )
 
         base_payload.pop("assistanceInteractions")
+        base_payload["answerPayload"] = {
+            "skipped": True,
+            "synthetic": True,
+            "targetMastery": 100,
+        }
+        response = self.client.post(
+            "/api/learning/submissions/",
+            base_payload,
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("answerPayload", response.json())
+        self.assertEqual(TaskSubmission.objects.count(), 0)
+
+        base_payload.pop("answerPayload")
         base_payload["taskId"] = "arrays-mcq-001"
         self.assertEqual(
             self.client.post("/api/learning/submissions/", base_payload, format="json").status_code,
             400,
         )
+
+    def test_submission_rejects_client_completion_ratio(self):
+        state = self.create_session()
+        task = get_task(state["currentTaskId"])
+        response = self.client.post(
+            "/api/learning/submissions/",
+            {
+                "sessionToken": state["sessionToken"],
+                "taskId": task["id"],
+                "elapsedTimeSeconds": 10,
+                "completionRatio": 1,
+                "selectedChoice": task["correctChoice"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("completionRatio", response.json())
+
+    def test_submission_derives_mcq_completion_and_validates_choice(self):
+        state = self.create_session()
+        task = get_task(state["currentTaskId"])
+        invalid = self.client.post(
+            "/api/learning/submissions/",
+            {
+                "sessionToken": state["sessionToken"],
+                "taskId": task["id"],
+                "elapsedTimeSeconds": 10,
+                "selectedChoice": "not a published choice",
+            },
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("selectedChoice", invalid.json())
+
+        result = self.submit_current_task(state["sessionToken"])
+        submission = TaskSubmission.objects.get(pk=result["submissionId"])
+        self.assertEqual(submission.completion_ratio, 1)
+        self.assertEqual(result["inputSnapshot"]["completionRatio"], 1)
+
+    def test_code_submission_requires_meaningful_edit_and_derives_completion(self):
+        task = next(
+            task
+            for task in TASK_BANK
+            if task["type"] == "code" and task.get("starterCode", "").strip()
+        )
+
+        for answer in ("", task["starterCode"], f"  {task['starterCode']}  "):
+            with self.subTest(answer=answer):
+                state = self.create_session(taskId=task["id"])
+                response = self.client.post(
+                    "/api/learning/submissions/",
+                    {
+                        "sessionToken": state["sessionToken"],
+                        "taskId": task["id"],
+                        "elapsedTimeSeconds": 10,
+                        "answerText": answer,
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("answerText", response.json())
+
+        state = self.create_session(taskId=task["id"])
+        response = self.client.post(
+            "/api/learning/submissions/",
+            {
+                "sessionToken": state["sessionToken"],
+                "taskId": task["id"],
+                "elapsedTimeSeconds": 10,
+                "answerText": f"{task['starterCode']}\n# learner edit",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.json())
+        submission = TaskSubmission.objects.get(pk=response.json()["submissionId"])
+        self.assertEqual(submission.completion_ratio, 1)
+        self.assertIsNone(submission.is_correct)
+        self.assertEqual(response.json()["engineTrace"]["anfis"]["correctnessSignal"], 65)
 
     def test_code_completion_is_not_stored_as_correctness(self):
         state = self.create_session(taskId="lists-code-001")
@@ -286,6 +378,13 @@ class LearningApiTests(TestCase):
         self.assertTrue(submission.answer_payload["skipped"])
         self.assertEqual(response.json()["session"]["completedTaskCount"], 1)
         self.assertNotEqual(response.json()["nextTask"]["id"], state["currentTaskId"])
+        self.assertEqual(response.json()["adaptation"]["requestedDirection"], "decrease")
+        self.assertEqual(response.json()["adaptation"]["direction"], "hold")
+        self.assertEqual(
+            response.json()["adaptation"]["constraintApplied"],
+            "difficulty_floor",
+        )
+        self.assertIn("difficulty floor", response.json()["adaptation"]["reason"])
 
     def test_strong_performance_exits_after_six_balanced_tasks(self):
         state = self.create_session()
@@ -307,6 +406,8 @@ class LearningApiTests(TestCase):
                 )
             if index == 0:
                 self.assertEqual(result["adaptation"]["direction"], "increase")
+                self.assertEqual(result["adaptation"]["requestedDirection"], "increase")
+                self.assertIsNone(result["adaptation"]["constraintApplied"])
                 self.assertEqual(
                     result["nextTask"]["difficulty"],
                     "intermediate",
@@ -417,7 +518,6 @@ class LearningApiTests(TestCase):
                 "sessionToken": token,
                 "taskId": first_task_id,
                 "elapsedTimeSeconds": 20,
-                "completionRatio": 1,
                 "selectedChoice": get_task(first_task_id)["correctChoice"],
             },
             format="json",
@@ -475,7 +575,6 @@ class LearningApiTests(TestCase):
                     "sessionToken": state["sessionToken"],
                     "taskId": task["id"],
                     "elapsedTimeSeconds": 10,
-                    "completionRatio": 1,
                     **response_fields,
                 }
                 submission = self.client.post(

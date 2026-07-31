@@ -55,6 +55,7 @@ function TutorPage() {
           canGoForwardReview={tutor.canGoForwardReview}
           onGoForwardReview={tutor.goForwardReview}
           revealingHint={tutor.revealingHint}
+          submittingTask={tutor.submittingTask}
           onRequestHint={tutor.requestHint}
           hintState={tutor.hintState}
           onSkip={tutor.skipTask}

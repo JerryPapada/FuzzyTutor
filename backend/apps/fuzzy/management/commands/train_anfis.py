@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.fuzzy.engines.anfis import correctness_signal, memberships
+from apps.fuzzy.engines.anfis import correctness_signal, memberships, rule_strengths
 from apps.fuzzy.engines.anfis_training import (
     feature_vector,
     predict_sample_mastery,
@@ -12,33 +12,14 @@ from apps.fuzzy.engines.anfis_training import (
 )
 from apps.learning.models import FuzzyEvaluationLog
 
-
-def rule_strengths(membership_values):
-    history = membership_values["history"]
-    completion = membership_values["completion"]
-    correctness = membership_values["correctness"]
-    challenge = membership_values["challenge"]
-    return {
-        "secure_prior_mastery": min(history["high"], completion["high"], correctness["strong"]),
-        "developing_mastery": max(
-            min(history["medium"], completion["high"]),
-            min(history["high"], correctness["emerging"]),
-        ),
-        "productive_challenge": min(challenge["advanced"], completion["high"], correctness["strong"]),
-        "fragile_progress": max(
-            min(history["medium"], completion["medium"]),
-            min(correctness["emerging"], completion["medium"]),
-        ),
-        "knowledge_gap": max(
-            min(history["low"], correctness["weak"]),
-            min(completion["low"], correctness["weak"]),
-        ),
-    }
-
-
 def target_for(log, survey):
-    stored_target = log.submission.answer_payload.get("targetMastery")
-    if stored_target is not None:
+    answer_payload = log.submission.answer_payload
+    stored_target = answer_payload.get("targetMastery")
+    is_synthetic_bootstrap = (
+        log.session.token.startswith("synthetic-anfis-")
+        and answer_payload.get("synthetic") is True
+    )
+    if is_synthetic_bootstrap and stored_target is not None:
         return float(stored_target)
     row = {
         "historicalGradeAverage": log.input_snapshot.get("historicalGradeAverage", 70.0),
@@ -62,6 +43,7 @@ def sample_from_log(log):
         submission.completion_ratio,
         correctness_score,
     )
+    strengths, _coverage_guard_used = rule_strengths(membership_values)
     return {
         "features": feature_vector(
             submission.task_metric_weight,
@@ -70,7 +52,7 @@ def sample_from_log(log):
             correctness_score,
             submission.task_type,
         ),
-        "ruleStrengths": rule_strengths(membership_values),
+        "ruleStrengths": strengths,
         "targetMastery": target_for(log, survey),
     }
 
@@ -85,10 +67,16 @@ class Command(BaseCommand):
         parser.add_argument("--output", type=str, default=None)
         parser.add_argument("--validation-fraction", type=float, default=0.2)
         parser.add_argument("--split-seed", type=int, default=42)
-        parser.add_argument(
+        source_group = parser.add_mutually_exclusive_group()
+        source_group.add_argument(
             "--include-real-only",
             action="store_true",
             help="Ignore synthetic bootstrap sessions and train only from non-synthetic logs.",
+        )
+        source_group.add_argument(
+            "--include-synthetic-only",
+            action="store_true",
+            help="Train only from deterministic synthetic bootstrap sessions.",
         )
 
     def handle(self, *args, **options):
@@ -97,6 +85,15 @@ class Command(BaseCommand):
         logs = FuzzyEvaluationLog.objects.select_related("submission", "session").all()
         if options["include_real_only"]:
             logs = logs.exclude(session__token__startswith="synthetic-anfis-")
+            training_source = "stored non-synthetic learner telemetry"
+            training_mode = "real_only"
+        elif options["include_synthetic_only"]:
+            logs = logs.filter(session__token__startswith="synthetic-anfis-")
+            training_source = "stored deterministic synthetic bootstrap telemetry"
+            training_mode = "synthetic_only"
+        else:
+            training_source = "stored learner telemetry with synthetic bootstrap rows allowed"
+            training_mode = "mixed"
 
         samples = [sample_from_log(log) for log in logs]
         if len(samples) < options["min_samples"]:
@@ -131,7 +128,8 @@ class Command(BaseCommand):
                 "learningRate": options["learning_rate"],
                 "initialLoss": round(losses[0], 4),
                 "finalLoss": round(losses[-1], 4),
-                "trainingSource": "stored learner telemetry with synthetic bootstrap rows allowed",
+                "trainingSource": training_source,
+                "trainingMode": training_mode,
                 "holdoutMetrics": {
                     key: round(value, 4) if isinstance(value, float) else value
                     for key, value in holdout_metrics.items()

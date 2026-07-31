@@ -143,7 +143,10 @@ def session_payload(session):
 
 
 def answer_payload(validated):
-    payload = dict(validated.get("answerPayload") or {})
+    # Only persist explicitly validated learner-response fields. Server-controlled
+    # metadata such as skipped state and training labels must never be copied from
+    # a client-provided dictionary.
+    payload = {}
     if validated.get("skipped"):
         payload["skipped"] = True
     if "selectedChoice" in validated:

@@ -142,6 +142,24 @@ def infer_cognitive_friction(
         if strength > 0
     ]
 
+    coverage_guard_used = not active_rules
+    if coverage_guard_used:
+        # The compact pedagogical rule base does not enumerate every Cartesian
+        # combination. A valid mixed-signal state must still produce a fuzzy area,
+        # so route it through the moderate support set and make the guard visible.
+        coverage_strength = min(
+            max(time_pressure.values()),
+            max(assistance.values()),
+            max(completion.values()),
+        )
+        active_rules.append(
+            {
+                "rule": "mixed_signal_coverage",
+                "strength": round(clamp(coverage_strength, 0.0, 1.0), 4),
+                "consequent": "moderate",
+            }
+        )
+
     friction, aggregated_area = centroid_of_aggregated_output(
         active_rules,
         fallback=42.0 if is_code_task else 25.0,
@@ -151,6 +169,7 @@ def infer_cognitive_friction(
         "score": clamp(friction),
         "memberships": membership_values,
         "rules": active_rules,
+        "coverageGuardUsed": coverage_guard_used,
         "outputSets": OUTPUT_SETS,
         "aggregatedArea": round(aggregated_area, 4),
         "defuzzification": "centroid_of_aggregated_output_area",

@@ -8,34 +8,55 @@ from .progress import (
 
 
 def target_difficulty(current_task, fuzzy_result):
-    mastery = fuzzy_result["knowledgeMastery"]
-    friction = fuzzy_result["systemCognitiveFriction"]
     recommendation = fuzzy_result["recommendation"]
     current_level = current_task["difficultyLevel"]
 
-    if recommendation == "increase_or_hold_high_tier" or (
-        mastery >= 75 and friction < 35
-    ):
+    if recommendation == "increase_or_hold_high_tier":
+        constraint = "difficulty_ceiling" if current_level == 3 else None
         return (
             min(3, current_level + 1),
             "increase",
             "High mastery with low friction supports a harder or equivalent task.",
+            constraint,
         )
-    if (
-        recommendation == "reduce_difficulty_and_show_support"
-        or friction >= 55
-        or mastery < 45
-    ):
+    if recommendation == "reduce_difficulty_and_show_support":
+        constraint = "difficulty_floor" if current_level == 1 else None
         return (
             max(1, current_level - 1),
             "decrease",
             "High friction or low mastery calls for an easier supported task.",
+            constraint,
         )
     return (
         current_level,
         "hold",
         "Signals are mixed, so the tutor keeps the current difficulty band.",
+        None,
     )
+
+
+def applied_direction(current_task, next_task):
+    level_delta = next_task["difficultyLevel"] - current_task["difficultyLevel"]
+    if level_delta > 0:
+        return "increase"
+    if level_delta < 0:
+        return "decrease"
+    return "hold"
+
+
+def adaptation_reason(requested, applied, constraint, default_reason, scope):
+    if scope == "curriculum_complete":
+        return "The curriculum is complete, so no further difficulty change is applied."
+    if constraint == "difficulty_ceiling" and applied == "hold":
+        return "A harder task was requested, but the learner is already at the advanced difficulty ceiling."
+    if constraint == "difficulty_floor" and applied == "hold":
+        return "An easier task was requested, but the learner is already at the foundation difficulty floor."
+    if requested != applied:
+        return (
+            f"The tutor requested a {requested}, but the closest available "
+            f"non-repeating task applies a {applied}."
+        )
+    return default_reason
 
 
 def preferred_task_type(session, module_id):
@@ -83,7 +104,7 @@ def select_next_task(
     fuzzy_result,
     module_decision,
 ):
-    target_level, direction, reason = target_difficulty(
+    target_level, requested_direction, requested_reason, constraint = target_difficulty(
         current_task,
         fuzzy_result,
     )
@@ -123,6 +144,15 @@ def select_next_task(
         next_task = current_task
         scope = "curriculum_complete"
 
+    direction = applied_direction(current_task, next_task)
+    reason = adaptation_reason(
+        requested_direction,
+        direction,
+        constraint,
+        requested_reason,
+        scope,
+    )
+
     session.current_module_id = next_task["moduleId"]
     session.current_task_id = next_task["id"]
     return {
@@ -130,6 +160,8 @@ def select_next_task(
         "moduleDecision": module_decision,
         "adaptation": {
             "direction": direction,
+            "requestedDirection": requested_direction,
+            "constraintApplied": constraint,
             "targetDifficultyLevel": target_level,
             "selectedDifficulty": next_task["difficulty"],
             "selectedScope": scope,

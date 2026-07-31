@@ -21,6 +21,7 @@ function TaskPanel({
   canGoForwardReview,
   onGoForwardReview,
   revealingHint,
+  submittingTask,
   onRequestHint,
   hintState,
   onSkip,
@@ -230,12 +231,16 @@ function TaskPanel({
                   type="button"
                   className="hint-btn"
                   onClick={onRequestHint}
-                  disabled={revealingHint || hintState?.exhausted}
+                  disabled={revealingHint || submittingTask || hintState?.exhausted}
                 >
                   <HelpCircle size={16} />
                   {hintState?.exhausted ? "No hints left" : "Get Hint"}
                 </button>
-                <button type="button" onClick={onSkip} disabled={!activeTask}>
+                <button
+                  type="button"
+                  onClick={onSkip}
+                  disabled={!activeTask || submittingTask}
+                >
                   Skip
                   <ChevronRight size={16} />
                 </button>
@@ -246,10 +251,10 @@ function TaskPanel({
             className="primary-action"
             type="button"
             onClick={onSubmit}
-            disabled={!activeTask || isReviewMode}
+            disabled={!activeTask || isReviewMode || submittingTask}
           >
             <Play size={18} />
-            Submit response
+            {submittingTask ? "Submitting…" : "Submit response"}
           </button>
         </div>
       </div>

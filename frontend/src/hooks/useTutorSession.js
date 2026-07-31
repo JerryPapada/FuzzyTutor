@@ -13,6 +13,43 @@ import {
   deleteSession,
 } from "../services/learningService";
 
+export function normalizeCodeResponse(value) {
+  return String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+}
+
+export function editableAnswersForTask(activeTask, storedAnswer = "") {
+  return {
+    selectedChoice: activeTask?.type === "mcq" ? storedAnswer : "",
+    codeAnswer:
+      activeTask?.type === "code"
+        ? storedAnswer || activeTask.starterCode || ""
+        : "",
+  };
+}
+
+export function submissionPayloadFor({
+  sessionToken,
+  activeTask,
+  elapsedTimeSeconds,
+  selectedChoice,
+  codeAnswer,
+}) {
+  return {
+    sessionToken,
+    taskId: activeTask.id,
+    elapsedTimeSeconds,
+    skipped: false,
+    ...(activeTask.type === "mcq"
+      ? { selectedChoice }
+      : { answerText: codeAnswer }),
+  };
+}
+
 export default function useTutorSession() {
   const [health, setHealth] = useState("checking");
   const [modules, setModules] = useState([]);
@@ -38,12 +75,14 @@ export default function useTutorSession() {
   const [confidence, setConfidence] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [submittingSurvey, setSubmittingSurvey] = useState(false);
+  const [submittingTask, setSubmittingTask] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
   const [hintState, setHintState] = useState(null);
   const [revealingHint, setRevealingHint] = useState(false);
   const [reviewItems, setReviewItems] = useState({});
   const [localAnswers, setLocalAnswers] = useState({});
   const notificationTimeoutRef = useRef(null);
+  const submissionInProgressRef = useRef(false);
 
   useEffect(() => {
     if (session) {
@@ -112,8 +151,7 @@ export default function useTutorSession() {
     return activeTaskIndexInTimeline < timeline.length - 1;
   }, [activeTask, session, activeTaskIndexInTimeline, timeline]);
 
-  const { elapsedSeconds, taskStartedAt, resetTimer } =
-    useElapsedTimer(activeTask);
+  const { elapsedSeconds, taskStartedAt } = useElapsedTimer(activeTask);
 
   useEffect(() => {
     async function initApp() {
@@ -242,11 +280,12 @@ export default function useTutorSession() {
       setSelectedChoice(activeTask.type === "mcq" ? submittedVal : "");
       setCodeAnswer(activeTask.type === "code" ? submittedVal : "");
     } else {
-      setSelectedChoice(
-        localAnswers[activeTask.id] || activeTask.choices?.[0] || ""
+      const editableAnswers = editableAnswersForTask(
+        activeTask,
+        localAnswers[activeTask.id]
       );
-      setCodeAnswer(localAnswers[activeTask.id] || activeTask.starterCode || "");
-      resetTimer();
+      setSelectedChoice(editableAnswers.selectedChoice);
+      setCodeAnswer(editableAnswers.codeAnswer);
     }
   }, [activeTask?.id, session?.currentTaskId, reviewItems, localAnswers]);
 
@@ -365,9 +404,12 @@ export default function useTutorSession() {
   }
 
   async function skipTask() {
-    if (!activeTask || !sessionToken) {
+    if (!activeTask || !sessionToken || submissionInProgressRef.current) {
       return;
     }
+
+    submissionInProgressRef.current = true;
+    setSubmittingTask(true);
 
     const responseTime = Math.max(
       0.1,
@@ -380,7 +422,6 @@ export default function useTutorSession() {
         taskId: activeTask.id,
         elapsedTimeSeconds: responseTime,
         skipped: true,
-        completionRatio: 0.0,
       });
 
       setEvaluation(result);
@@ -436,32 +477,50 @@ export default function useTutorSession() {
         });
     } catch (error) {
       console.error("Failed to skip task:", error);
-      triggerNotification("An error occurred while skipping the task.");
+      triggerNotification(error.message || "An error occurred while skipping the task.");
+    } finally {
+      submissionInProgressRef.current = false;
+      setSubmittingTask(false);
     }
   }
 
   async function submitAnswer() {
-    if (!activeTask || !sessionToken) {
+    if (!activeTask || !sessionToken || submissionInProgressRef.current) {
       return;
     }
 
+    if (activeTask.type === "mcq" && !selectedChoice.trim()) {
+      triggerNotification("Select an answer or explicitly skip this task.");
+      return;
+    }
+    if (activeTask.type === "code") {
+      const normalizedAnswer = normalizeCodeResponse(codeAnswer);
+      const normalizedStarter = normalizeCodeResponse(activeTask.starterCode);
+      if (!normalizedAnswer) {
+        triggerNotification("Enter a code response or explicitly skip this task.");
+        return;
+      }
+      if (normalizedAnswer === normalizedStarter) {
+        triggerNotification("Edit the starter code meaningfully or explicitly skip this task.");
+        return;
+      }
+    }
+
+    submissionInProgressRef.current = true;
+    setSubmittingTask(true);
     const responseTime = Math.max(
       0.1,
       (Date.now() - taskStartedAt.current) / 1000
     );
-    const answerText =
-      activeTask.type === "code" ? codeAnswer.trim() : selectedChoice.trim();
 
     try {
-      const result = await submitSubmission({
+      const result = await submitSubmission(submissionPayloadFor({
         sessionToken,
-        taskId: activeTask.id,
+        activeTask,
         elapsedTimeSeconds: responseTime,
-        skipped: false,
-        completionRatio: answerText.length > 0 ? 1 : 0,
-        selectedChoice: activeTask.type === "mcq" ? selectedChoice : "",
-        answerText: activeTask.type === "code" ? codeAnswer : "",
-      });
+        selectedChoice,
+        codeAnswer,
+      }));
 
       setEvaluation(result);
 
@@ -519,6 +578,9 @@ export default function useTutorSession() {
       triggerNotification(
         error.message || "An error occurred during submission."
       );
+    } finally {
+      submissionInProgressRef.current = false;
+      setSubmittingTask(false);
     }
   }
 
@@ -557,7 +619,7 @@ export default function useTutorSession() {
   }
 
   async function requestHint() {
-    if (!activeTask || !sessionToken || revealingHint) return;
+    if (!activeTask || !sessionToken || revealingHint || submittingTask) return;
 
     const responseTime = Math.max(
       0.1,
@@ -657,6 +719,7 @@ export default function useTutorSession() {
     confidence,
     feedbackComment,
     submittingSurvey,
+    submittingTask,
     showTrace,
     hintState,
     revealingHint,

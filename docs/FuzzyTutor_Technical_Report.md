@@ -1,7 +1,7 @@
 ---
 title: "FuzzyTutor"
 subtitle: "Technical Project Report, Fuzzy-System Definition, Evaluation, and User Manual"
-date: "13 July 2026"
+date: "30 July 2026"
 lang: en
 toc: true
 toc-depth: 3
@@ -29,7 +29,7 @@ The implemented system addresses the final joint project definition as follows:
 |---|---|
 | Personalized fuzzy decisions | Continuous mastery/friction estimates drive task difficulty and support messages |
 | Fuzzy sets and membership functions | Explicit triangular and shoulder functions in both engines |
-| Fuzzy rules | Five ANFIS activation rules and six core Mamdani rules plus a code-workspace rule |
+| Fuzzy rules | Five ANFIS activation rules and six core Mamdani rules plus explicit code-workspace and mixed-signal coverage guards |
 | Defuzzification | ANFIS normalized weighted TSK output; Mamdani centroid of aggregated output area |
 | ANFIS extension | Trainable first-order consequent parameters with a versioned model artifact |
 | Seven programming modules | Lists, arrays, dictionaries, classes, inheritance, exceptions, and control flow |
@@ -99,7 +99,7 @@ MCQ choices are returned to the browser, but correct answers remain private befo
 
 Every task defines three private, distinct support levels: a conceptual cue, a strategy, and a scaffold. The hint endpoint reveals them sequentially and persists each reveal. Normal catalog and session task payloads contain no unrevealed hint content.
 
-Code submissions are deliberately not executed or graded. This prevents compiler/test feedback from becoming an additional anxiety signal. Instead, the models use completion ratio, normalized response time, assistance interactions, task challenge, and prior aggregate mastery. A code response is never stored as correct merely because it is non-empty.
+Code submissions are deliberately not executed or graded. This prevents compiler/test feedback from becoming an additional anxiety signal. The backend derives completion instead of trusting a browser value: an explicit skip is 0, a valid MCQ choice is 1, and meaningfully edited code is 1. Blank code and code equivalent to the normalized starter template are rejected with guidance to edit or skip. A code response is never stored as correct merely because it is non-empty.
 
 # Shared fuzzy membership functions
 
@@ -123,7 +123,7 @@ The cognitive engine predicts Knowledge Mastery on [0,100]. Its evidence is:
 - a correctness/performance signal; and
 - task type, used only for a small incomplete-code penalty feature.
 
-For MCQs, correctness is computed against the private backend key. For code tasks, correctness is unknown; a bounded performance signal is derived from completion without claiming that the code is correct.
+For MCQs, correctness is computed against the private backend key and maps to performance evidence 100 (correct) or 20 (incorrect). For code tasks, correctness is unknown; the conservative performance signal is `40 + 25C`, where C is completion ratio. Therefore even a completed code response contributes at most 65 and never receives MCQ-like correctness credit.
 
 ## Premise membership sets
 
@@ -162,13 +162,15 @@ Mastery = Σ(w_i f_i) / Σ(w_i)
 
 where w_i is the activation strength of rule i. This corresponds to the core ANFIS layers: premise fuzzification, rule firing, normalization, consequent calculation, and output aggregation. The premise definitions are fixed for transparency; the consequent parameters are trained.
 
+The five pedagogical rules form a compact rule base rather than the full Cartesian product of all premise sets. If a valid combination activates none of them, a visible mixed-evidence coverage guard routes the combination through the trained `developing_mastery` consequent. Its strength is the minimum of the best-supported linguistic set for challenge, history, completion, and performance. The API trace reports `coverageGuardUsed=true`, so the engine never silently substitutes a non-rule prediction.
+
 ## Synthetic training data
 
-The deterministic generator creates 180 records across five profiles: strong, struggling, improving, overchallenged, and fast-incorrect. Each row includes task weight, history, response-time ratio, assistance, completion, task type, correctness state, confidence, perceived difficulty, and a target mastery label.
+The deterministic generator creates 180 records across five profiles: strong, struggling, improving, overchallenged, and fast-incorrect. Each row includes task weight, history, response-time ratio, assistance, completion, task type, correctness state, confidence, perceived difficulty, and a target mastery label. MCQ rows contain Boolean correctness; every code row has null correctness and uses the same conservative completion evidence as runtime inference.
 
 The synthetic target is a declared weighted teaching heuristic, not hidden ground truth:
 
-Target = 0.42(correctness) + 0.24(completion) + 0.14(speed) + 0.12(confidence) + 0.08(history) + difficulty adjustment.
+Target = 0.42(performance evidence) + 0.24(completion) + 0.14(speed) + 0.12(confidence) + 0.08(history) + difficulty adjustment.
 
 The seed is 42. A deterministic split holds out 20% of records before gradient fitting. The versioned model was trained for 650 epochs at learning rate 0.00002.
 
@@ -177,11 +179,11 @@ The seed is 42. A deterministic split holds out 20% of records before gradient f
 | Metric | Default consequent baseline | Trained model |
 |---|---:|---:|
 | Holdout records | 36 | 36 |
-| MAE | 13.052 | 4.334 |
-| RMSE | 14.317 | 5.840 |
-| R² | 0.532 | 0.922 |
+| MAE | 8.368 | 3.523 |
+| RMSE | 10.813 | 4.367 |
+| R² | 0.610 | 0.936 |
 
-The RMSE improvement is 8.477 points on held-out synthetic samples. These results demonstrate that the implemented training pipeline learns its declared synthetic relationship. They do not establish effectiveness for real learners; real-data calibration is future work.
+The RMSE improvement is 6.445 points on held-out synthetic samples. Two consecutive training runs produced the byte-identical artifact SHA-256 `1daf10f8cb248484cad85c788a18c2a4f21f0ce270a3a1c138e76e8f81b9c68e`. These results demonstrate that the implemented training pipeline learns its declared synthetic relationship. They do not establish effectiveness for real learners; real-data calibration is future work. Training and evaluation use an explicit `synthetic_only` source mode, so unrelated learner sessions cannot change the versioned artifact or its reported holdout metrics.
 
 # Mamdani cognitive-friction engine
 
@@ -219,6 +221,7 @@ The output linguistic sets are:
 5. High time AND (medium assistance OR high assistance) → high friction.
 6. (Incomplete AND high time) OR (incomplete AND high assistance) → severe friction.
 7. A code workspace activates moderate friction at strength 0.35 to represent its additional interaction load without treating it as failure.
+8. If none of the six behavioral rules activates for a valid MCQ signal combination, a visible mixed-signal coverage guard activates moderate friction. Its strength is the minimum of the best-supported time, assistance, and completion memberships.
 
 ## Inference and centroid defuzzification
 
@@ -228,7 +231,7 @@ The crisp result is the centroid of the aggregated output area:
 
 Friction = Σ(x μ_aggregated(x)) / Σ(μ_aggregated(x)).
 
-The API trace returns the input memberships, active rule strengths, output-set definitions, aggregated area, and the explicit method name `centroid_of_aggregated_output_area`.
+The API trace returns the input memberships, active rule strengths, coverage-guard state, output-set definitions, aggregated area, and the explicit method name `centroid_of_aggregated_output_area`. Operational inputs always produce a non-zero aggregated fuzzy area; the numerical fallback remains only as a defensive safeguard for invalid internal calls.
 
 # Synthesis and adaptation controller
 
@@ -243,10 +246,12 @@ The next difficulty decision is:
 | Condition | Recommendation | Action |
 |---|---|---|
 | Mastery ≥ 75 and friction < 35 | Increase or hold high tier | Target one level harder, capped at advanced |
-| Mastery < 45 and friction ≥ 55 | Reduce difficulty and support | Target one level easier, floored at foundation |
+| Mastery < 45 or friction ≥ 55 | Reduce difficulty and support | Target one level easier, floored at foundation |
 | Mixed evidence | Hold current tier | Stay near the current level |
 
-The selector never repeats a completed task. During the first six attempts in a module it balances MCQ and code tasks while remaining near the fuzzy target difficulty. After each attempt from the sixth onward, the module is mastered when module mastery is at least 75, friction is below 40, and at least two of the latest three MCQs are correct. Otherwise selection continues through the 15-task bank. Bank exhaustion advances the learner without falsely labelling the module mastered. Untouched modules are never skipped.
+The selector consumes this single recommendation rather than independently reinterpreting the crisp scores. It never repeats a completed task. During the first six attempts in a module it balances MCQ and code tasks while remaining near the fuzzy target difficulty. After each attempt from the sixth onward, the module is mastered when module mastery is at least 75, friction is below 40, and at least two of the latest three MCQs are correct. Otherwise selection continues through the 15-task bank. Bank exhaustion advances the learner without falsely labelling the module mastered. Untouched modules are never skipped.
+
+Focus and action are separate explainable dimensions: mild friction can produce `Needs Support` while high mastery still requests advancement. Support text is generated from both dimensions, so this combination recommends advancing with a hint or explanation available. The response reports `requestedDirection`, the actually applied `direction`, and a nullable `constraintApplied`. At foundation and advanced boundaries, the actual action is `hold` and the response names the difficulty floor or ceiling instead of claiming an impossible change.
 
 Global session and module-local aggregates use a smoothing update: 65% prior aggregate plus 35% latest engine output. Curriculum completion means that all seven module-progress records are terminal, including mastery exits and exhausted banks.
 
@@ -256,7 +261,7 @@ Every submission response contains:
 
 - Knowledge Mastery and System Cognitive Friction;
 - focus state, recommendation, and support message;
-- next-task difficulty and a plain-language reason;
+- requested and applied next-task direction, any floor/ceiling constraint, and a plain-language reason;
 - input snapshot; and
 - optional detailed memberships and active-rule trace.
 
@@ -283,7 +288,7 @@ Because no live study has yet been conducted, this report makes no fabricated cl
 | `POST /api/fuzzy/evaluate/` | Standalone engine demonstration without persistence |
 | `GET /api/docs/` | Typed Swagger/OpenAPI documentation |
 
-Malformed or unknown module identifiers, invalid navigation directions, stale/non-current task submissions, client-supplied correctness, duplicate surveys, and unknown tokens receive 4xx responses rather than server errors.
+Malformed or unknown module identifiers, invalid navigation directions, stale/non-current task submissions, invalid MCQ choices, blank or unchanged code, client-supplied completion, correctness, assistance, or answer metadata, duplicate surveys, and unknown tokens receive 4xx responses rather than server errors. Submission history and ANFIS training labels are built by the backend; public clients cannot inject `skipped`, `synthetic`, or `targetMastery` metadata.
 
 # User manual
 
@@ -314,7 +319,7 @@ If a page refresh occurs, the stored session token can be used to restore the cu
 - Inspect engine inputs and active rules in the submission response's `engineTrace`.
 - Use the training-data export for tables and offline analysis.
 - Reproduce the synthetic model by running the seed, train, and evaluate management commands documented in the repository README.
-- Use Swagger to verify frontend payloads. The browser must never send `isCorrect`, `assistanceInteractions`, `taskMetricWeight`, or private solution data during the session workflow.
+- Use Swagger to verify frontend payloads. The browser must never send `isCorrect`, `assistanceInteractions`, `answerPayload`, `taskMetricWeight`, or private solution data during the session workflow.
 
 # Verification and evaluation
 
@@ -322,17 +327,20 @@ Automated backend verification includes:
 
 - private three-level task hints, sequential reveal, restoration, and server-derived assistance telemetry;
 - ANFIS strong/weak evidence and output-bound tests;
+- exhaustive operational-grid checks that every ANFIS inference activates at least one rule;
 - deterministic synthetic-row generation;
 - training-artifact creation and holdout metadata;
 - Mamdani behavioral ordering and centroid method tests;
+- exhaustive operational-grid checks that every Mamdani inference has a non-zero aggregated output area;
 - answer-safe public task contracts;
 - invalid-query 400 responses;
-- rejection of client correctness and stale tasks;
+- rejection of client correctness, assistance, answer metadata, and stale tasks;
+- server-derived completion, valid-choice enforcement, and meaningful code-edit validation;
 - null correctness for non-graded code tasks;
 - 105-task distribution, answer privacy, non-repeating selection, balanced evidence, mastery exit, bank exhaustion, review, and legacy-session progression; and
 - persistent, non-duplicated survey milestones.
 
-The verified suite contains 27 tests. Django system checks, migration-drift checks, and OpenAPI schema validation also pass.
+The verified suites contain 42 backend tests and 6 frontend tests. Django system checks, migration-drift checks, OpenAPI schema validation, and the production frontend build also pass.
 
 # Limitations and future improvements
 

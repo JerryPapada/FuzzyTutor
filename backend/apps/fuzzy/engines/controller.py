@@ -31,21 +31,25 @@ def recommendation_for(mastery, friction):
         and friction < 35.0
     ):
         return "increase_or_hold_high_tier"
-    # If the student has low mastery and high cognitive friction, recommend reducing difficulty and showing support.
+    # Either low mastery or high friction is enough to request the safer path.
     if (
         mastery < FOCUS_THRESHOLDS["low_mastery_max"]
-        and friction >= FOCUS_THRESHOLDS["support_friction_max"]
+        or friction >= FOCUS_THRESHOLDS["support_friction_max"]
     ):
         return "reduce_difficulty_and_show_support"
     return "hold_current_tier"
 
-# Provide a support message based on the focus state
-def support_message_for(focus_state):
+# Explain the learner state and requested action without conflating the two.
+def support_message_for(focus_state, recommendation):
+    if recommendation == "increase_or_hold_high_tier":
+        if focus_state == "Focused & Steady":
+            return "The learner looks ready for the next challenge."
+        return "Advance while keeping a hint or short explanation available."
+    if recommendation == "reduce_difficulty_and_show_support":
+        return "Offer a guided prompt and additional support for the next task."
     if focus_state == "Focused & Steady":
-        return "The student looks ready for the next challenge."
-    if focus_state == "Needs Support":
-        return "Keep the tier steady and add a short explanation."
-    return "Reduce the difficulty and offer a guided prompt."
+        return "Continue in the current band and reinforce this steady progress."
+    return "Continue in the current band with an optional hint or short explanation."
 
 # Evaluate the learning state based on various inputs and return a structured result
 def evaluate_learning_state(inputs):
@@ -80,7 +84,7 @@ def evaluate_learning_state(inputs):
         "systemCognitiveFriction": round(friction, 2),
         "focusState": focus_state,
         "recommendation": recommendation,
-        "supportMessage": support_message_for(focus_state),
+        "supportMessage": support_message_for(focus_state, recommendation),
         "inputSnapshot": {
             "taskMetricWeight": round(task_weight, 2),
             "historicalGradeAverage": round(historical_grade, 2),

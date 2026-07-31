@@ -8,6 +8,12 @@ const RECOMMENDATION_LABELS = {
   hold_current_tier: "Maintain Current Difficulty Level",
 };
 
+const DIRECTION_LABELS = {
+  increase: "Increase difficulty",
+  decrease: "Decrease difficulty",
+  hold: "Hold difficulty",
+};
+
 function XAIPanel({ evaluation, showTrace, onToggleTrace }) {
   return (
     <aside className="xai-panel">
@@ -39,7 +45,12 @@ function XAIPanel({ evaluation, showTrace, onToggleTrace }) {
       <div className="recommendation">
         <span>{evaluation?.focusState ?? "Waiting for a submission"}</span>
         <p>
-          {evaluation?.recommendation
+          {evaluation?.adaptation
+            ? `Applied next-task action: ${
+                DIRECTION_LABELS[evaluation.adaptation.direction] ??
+                evaluation.adaptation.direction
+              }`
+            : evaluation?.recommendation
             ? RECOMMENDATION_LABELS[evaluation.recommendation] ??
               evaluation.recommendation
             : "The next task will adapt after the first response."}
@@ -75,6 +86,22 @@ function XAIPanel({ evaluation, showTrace, onToggleTrace }) {
                   </div>
                   <p className="adaptation-reason">
                     {evaluation.adaptation.reason}
+                  </p>
+                  <p className="adaptation-reason">
+                    Model request: {DIRECTION_LABELS[
+                      evaluation.adaptation.requestedDirection
+                    ] ?? evaluation.adaptation.requestedDirection}
+                    {evaluation.adaptation.constraintApplied
+                      ? ` · Constraint: ${evaluation.adaptation.constraintApplied.replaceAll(
+                          "_",
+                          " "
+                        )}`
+                      : ""}
+                  </p>
+                  <p className="adaptation-reason">
+                    Raw recommendation: {RECOMMENDATION_LABELS[
+                      evaluation.recommendation
+                    ] ?? evaluation.recommendation}
                   </p>
                 </div>
               )}

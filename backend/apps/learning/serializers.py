@@ -59,12 +59,18 @@ class SubmissionSerializer(serializers.Serializer):
     taskId = serializers.CharField()
     elapsedTimeSeconds = serializers.FloatField(min_value=0.1)
     skipped = serializers.BooleanField(default=False)
-    completionRatio = serializers.FloatField(default=1.0, min_value=0.0, max_value=1.0)
     selectedChoice = serializers.CharField(required=False, allow_blank=True)
     answerText = serializers.CharField(required=False, allow_blank=True)
-    answerPayload = serializers.DictField(required=False)
 
     def validate(self, attrs):
+        if "completionRatio" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "completionRatio": (
+                        "Completion is derived by the backend and must not be supplied."
+                    )
+                }
+            )
         if "isCorrect" in self.initial_data:
             raise serializers.ValidationError(
                 {"isCorrect": "Correctness is derived by the backend and must not be supplied."}
@@ -74,6 +80,14 @@ class SubmissionSerializer(serializers.Serializer):
                 {
                     "assistanceInteractions": (
                         "Assistance is derived from server-recorded hint events and must not be supplied."
+                    )
+                }
+            )
+        if "answerPayload" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "answerPayload": (
+                        "Answer metadata is built by the backend and must not be supplied."
                     )
                 }
             )
@@ -93,17 +107,48 @@ class SubmissionSerializer(serializers.Serializer):
             )
         if attrs["session"].submissions.filter(task_id=task["id"]).exists():
             raise serializers.ValidationError({"taskId": "Task has already been completed."})
-        if task["type"] == "mcq" and not attrs["skipped"] and not attrs.get("selectedChoice"):
-            raise serializers.ValidationError(
-                {"selectedChoice": "A selected choice is required for an MCQ task."}
-            )
         if attrs["skipped"]:
             # A skip is an explicit incomplete attempt, regardless of any stale form values.
             attrs["completionRatio"] = 0.0
             attrs.pop("selectedChoice", None)
             attrs.pop("answerText", None)
+        elif task["type"] == "mcq":
+            selected_choice = attrs.get("selectedChoice")
+            if not selected_choice:
+                raise serializers.ValidationError(
+                    {"selectedChoice": "A selected choice is required for an MCQ task."}
+                )
+            if selected_choice not in task["choices"]:
+                raise serializers.ValidationError(
+                    {"selectedChoice": "The selected choice is not valid for this task."}
+                )
+            attrs["completionRatio"] = 1.0
+            attrs.pop("answerText", None)
+        else:
+            answer_text = attrs.get("answerText", "")
+            normalized_answer = self._normalize_code(answer_text)
+            normalized_starter = self._normalize_code(task.get("starterCode", ""))
+            if not normalized_answer:
+                raise serializers.ValidationError(
+                    {"answerText": "Enter a code response or explicitly skip this task."}
+                )
+            if normalized_answer == normalized_starter:
+                raise serializers.ValidationError(
+                    {
+                        "answerText": (
+                            "Edit the starter code meaningfully or explicitly skip this task."
+                        )
+                    }
+                )
+            attrs["completionRatio"] = 1.0
+            attrs.pop("selectedChoice", None)
         attrs["task"] = task
         return attrs
+
+    @staticmethod
+    def _normalize_code(value):
+        lines = str(value or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        return "\n".join(line.rstrip() for line in lines).strip()
 
 
 class HintRequestSerializer(serializers.Serializer):
@@ -185,6 +230,10 @@ class ErrorResponseSerializer(serializers.Serializer):
     sessionToken = serializers.CharField(required=False)
     taskId = serializers.CharField(required=False)
     assistanceInteractions = serializers.CharField(required=False)
+    answerPayload = serializers.CharField(required=False)
+    completionRatio = serializers.CharField(required=False)
+    selectedChoice = serializers.CharField(required=False)
+    answerText = serializers.CharField(required=False)
 
 # Serializer for difficulty counts in a module
 class DifficultyCountsSerializer(serializers.Serializer):
@@ -335,6 +384,8 @@ class AdaptationSignalsResponseSerializer(serializers.Serializer):
 # Serializer for adaptation response data
 class AdaptationResponseSerializer(serializers.Serializer):
     direction = serializers.CharField()
+    requestedDirection = serializers.CharField()
+    constraintApplied = serializers.CharField(allow_null=True)
     targetDifficultyLevel = serializers.IntegerField()
     selectedDifficulty = serializers.CharField()
     selectedScope = serializers.CharField()

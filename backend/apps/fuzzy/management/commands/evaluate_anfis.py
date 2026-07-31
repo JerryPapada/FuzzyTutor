@@ -26,10 +26,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--parameters", type=str, default=None)
         parser.add_argument("--min-samples", type=int, default=1)
-        parser.add_argument(
+        source_group = parser.add_mutually_exclusive_group()
+        source_group.add_argument(
             "--include-real-only",
             action="store_true",
             help="Ignore synthetic bootstrap sessions and evaluate only non-synthetic logs.",
+        )
+        source_group.add_argument(
+            "--include-synthetic-only",
+            action="store_true",
+            help="Evaluate only deterministic synthetic bootstrap sessions.",
         )
 
     def handle(self, *args, **options):
@@ -42,6 +48,8 @@ class Command(BaseCommand):
         logs = FuzzyEvaluationLog.objects.select_related("submission", "session").all()
         if options["include_real_only"]:
             logs = logs.exclude(session__token__startswith="synthetic-anfis-")
+        elif options["include_synthetic_only"]:
+            logs = logs.filter(session__token__startswith="synthetic-anfis-")
 
         samples = [sample_from_log(log) for log in logs]
         if len(samples) < options["min_samples"]:

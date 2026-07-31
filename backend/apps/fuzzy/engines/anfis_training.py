@@ -65,6 +65,15 @@ FEATURE_NAMES = [
     "bias",
 ]
 
+
+def performance_evidence(is_correct, completion_ratio):
+    """Map graded or ungraded task evidence to a bounded performance signal."""
+    if is_correct is True:
+        return 100.0
+    if is_correct is False:
+        return 20.0
+    return 40.0 + (clamp(completion_ratio, 0.0, 1.0) * 25.0)
+
 # paths
 def default_parameters_path():
     return Path(settings.BASE_DIR) / "apps" / "fuzzy" / "trained" / "anfis_parameters.json"
@@ -107,7 +116,10 @@ def synthetic_target_mastery(row):
     confidence = clamp((float(row.get("confidenceScore") or 3) - 1.0) * 25.0)
     perceived_difficulty = float(row.get("perceivedDifficulty") or 3)
     difficulty_bonus = (4.0 - perceived_difficulty) * 3.0
-    correctness = 100.0 if row["isCorrect"] else 20.0
+    correctness = performance_evidence(
+        row.get("isCorrect"),
+        float(row["completionRatio"]),
+    )
     target = (
         0.42 * correctness
         + 0.24 * float(row["completionRatio"]) * 100.0
@@ -177,7 +189,12 @@ def generate_synthetic_training_rows(count=180, seed=42):
     rows = []
     for index in range(count):
         profile = profiles[index % len(profiles)]
-        is_correct = rng.random() < profile["correct_probability"]
+        task_type = rng.choice(["mcq", "code"])
+        is_correct = (
+            rng.random() < profile["correct_probability"]
+            if task_type == "mcq"
+            else None
+        )
         row = {
             "syntheticProfile": profile["name"],
             "taskMetricWeight": rng.choice(task_weights),
@@ -185,7 +202,7 @@ def generate_synthetic_training_rows(count=180, seed=42):
             "relativeResponseTime": round(rng.uniform(*profile["time"]), 2),
             "assistanceInteractions": rng.randint(*profile["assistance"]),
             "completionRatio": round(rng.uniform(*profile["completion"]), 2),
-            "taskType": rng.choice(["mcq", "code"]),
+            "taskType": task_type,
             "isCorrect": is_correct,
             "confidenceScore": rng.randint(*profile["confidence"]),
             "perceivedDifficulty": rng.randint(*profile["difficulty"]),

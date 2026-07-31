@@ -1,17 +1,15 @@
 from .anfis_training import (
     DEFAULT_CONSEQUENT_WEIGHTS,
+    RULE_NAMES,
     consequent_output,
     feature_vector,
     load_trained_parameters,
+    performance_evidence,
 )
 from .utils import clamp, left_shoulder, right_shoulder, triangular, weighted_average
 
 def correctness_signal(is_correct, completion_ratio):
-    if is_correct is True:
-        return 100.0
-    if is_correct is False:
-        return 20.0
-    return 45.0 + (completion_ratio * 35.0)
+    return performance_evidence(is_correct, completion_ratio)
 
 # Compute membership values for each linguistic variable
 def memberships(task_weight, historical_grade, completion_ratio, correctness_score):
@@ -38,6 +36,54 @@ def memberships(task_weight, historical_grade, completion_ratio, correctness_sco
         },
     }
 
+
+def rule_strengths(membership_values):
+    """Return the five ANFIS consequent strengths with complete input coverage."""
+    history = membership_values["history"]
+    completion = membership_values["completion"]
+    correctness = membership_values["correctness"]
+    challenge = membership_values["challenge"]
+    strengths = {
+        "secure_prior_mastery": min(
+            history["high"],
+            completion["high"],
+            correctness["strong"],
+        ),
+        "developing_mastery": max(
+            min(history["medium"], completion["high"]),
+            min(history["high"], correctness["emerging"]),
+        ),
+        "productive_challenge": min(
+            challenge["advanced"],
+            completion["high"],
+            correctness["strong"],
+        ),
+        "fragile_progress": max(
+            min(history["medium"], completion["medium"]),
+            min(correctness["emerging"], completion["medium"]),
+        ),
+        "knowledge_gap": max(
+            min(history["low"], correctness["weak"]),
+            min(completion["low"], correctness["weak"]),
+        ),
+    }
+
+    coverage_guard_used = not any(strength > 0 for strength in strengths.values())
+    if coverage_guard_used:
+        # The named pedagogical rules intentionally form a compact rule base rather
+        # than a full Cartesian product. Route a mixed but valid combination through
+        # the trained developing-mastery consequent, and expose that decision in the
+        # trace instead of silently returning a non-fuzzy fallback.
+        strengths["developing_mastery"] = min(
+            max(challenge.values()),
+            max(history.values()),
+            max(completion.values()),
+            max(correctness.values()),
+        )
+
+    return strengths, coverage_guard_used
+
+
 # Compute the predicted mastery score using the ANFIS model
 def predict_mastery(
     task_weight,
@@ -53,11 +99,6 @@ def predict_mastery(
         completion_ratio,
         correctness_score,
     )
-    history = membership_values["history"]
-    completion = membership_values["completion"]
-    correctness = membership_values["correctness"]
-    challenge = membership_values["challenge"]
-
     trained_parameters = load_trained_parameters()
     consequent_weights = (
         trained_parameters.get("consequentWeights")
@@ -71,42 +112,14 @@ def predict_mastery(
         correctness_score,
         task_type,
     )
-    # Define the fuzzy rules and their corresponding outputs based on the memberships and consequent weights
+    strengths, coverage_guard_used = rule_strengths(membership_values)
     rule_specs = [
         (
-            "secure_prior_mastery",
-            min(history["high"], completion["high"], correctness["strong"]),
-            consequent_output(consequent_weights["secure_prior_mastery"], features),
-        ),
-        (
-            "developing_mastery",
-            max(
-                min(history["medium"], completion["high"]),
-                min(history["high"], correctness["emerging"]),
-            ),
-            consequent_output(consequent_weights["developing_mastery"], features),
-        ),
-        (
-            "productive_challenge",
-            min(challenge["advanced"], completion["high"], correctness["strong"]),
-            consequent_output(consequent_weights["productive_challenge"], features),
-        ),
-        (
-            "fragile_progress",
-            max(
-                min(history["medium"], completion["medium"]),
-                min(correctness["emerging"], completion["medium"]),
-            ),
-            consequent_output(consequent_weights["fragile_progress"], features),
-        ),
-        (
-            "knowledge_gap",
-            max(
-                min(history["low"], correctness["weak"]),
-                min(completion["low"], correctness["weak"]),
-            ),
-            consequent_output(consequent_weights["knowledge_gap"], features),
-        ),
+            rule_name,
+            strengths[rule_name],
+            consequent_output(consequent_weights[rule_name], features),
+        )
+        for rule_name in RULE_NAMES
     ]
 
     active_rules = [
@@ -129,6 +142,7 @@ def predict_mastery(
         "memberships": membership_values,
         "rules": active_rules,
         "correctnessSignal": round(correctness_score, 2),
+        "coverageGuardUsed": coverage_guard_used,
         "contributionWeights": consequent_weights,
         "modelType": "trained_anfis" if trained_parameters else "transparent_rule_weighted_anfis_style",
         "trainingMetadata": trained_parameters.get("metadata") if trained_parameters else None,

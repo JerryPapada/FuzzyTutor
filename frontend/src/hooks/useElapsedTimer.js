@@ -9,6 +9,11 @@ export default function useElapsedTimer(activeTask) {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    taskStartedAt.current = Date.now();
+    setClock(Date.now());
+  }, [activeTask?.id]);
+
   const elapsedSeconds = useMemo(() => {
     if (!activeTask) {
       return 0;
@@ -17,9 +22,5 @@ export default function useElapsedTimer(activeTask) {
     return Math.max(0, Math.round((clock - taskStartedAt.current) / 1000));
   }, [activeTask, clock]);
 
-  const resetTimer = () => {
-    taskStartedAt.current = Date.now();
-  };
-
-  return { elapsedSeconds, taskStartedAt, resetTimer };
+  return { elapsedSeconds, taskStartedAt };
 }

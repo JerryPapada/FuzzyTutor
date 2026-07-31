@@ -1,61 +1,62 @@
 {
   "consequentWeights": {
     "developing_mastery": {
-      "bias": -0.017885669621298544,
-      "codePenalty": -1.1587208446020472,
-      "completionRatio": 0.4759866012058192,
-      "correctnessSignal": 0.40260888125233235,
-      "historicalGradeAverage": 0.24556193184271158,
-      "taskMetricWeight": -0.16606347596258753
+      "bias": -0.006456829560049,
+      "codePenalty": 0.06064020371552154,
+      "completionRatio": 0.44727293953202163,
+      "correctnessSignal": 0.45949054833948494,
+      "historicalGradeAverage": 0.1741150862306724,
+      "taskMetricWeight": -0.043532677529825384
     },
     "fragile_progress": {
-      "bias": -0.02815205234960838,
-      "codePenalty": -0.357072342506875,
-      "completionRatio": 0.5464059395472354,
-      "correctnessSignal": 0.42904638762835123,
-      "historicalGradeAverage": 0.059827140605678904,
-      "taskMetricWeight": -0.09635740465898118
+      "bias": -0.010672826412226694,
+      "codePenalty": -0.150849827873876,
+      "completionRatio": 0.5187922737056467,
+      "correctnessSignal": 0.4538362474240677,
+      "historicalGradeAverage": 0.06108267831232185,
+      "taskMetricWeight": -0.05320293766751365
     },
     "knowledge_gap": {
-      "bias": 0.024372038915813472,
-      "codePenalty": -0.07233495938623982,
-      "completionRatio": 0.37900978690101456,
-      "correctnessSignal": 0.6474407783162788,
-      "historicalGradeAverage": 0.09786010063391004,
-      "taskMetricWeight": 0.08411977111748378
+      "bias": 0.05990788589108003,
+      "codePenalty": -1.0428471134077986,
+      "completionRatio": 0.41489701448253963,
+      "correctnessSignal": 0.47157235934562214,
+      "historicalGradeAverage": 0.07641004914603047,
+      "taskMetricWeight": 0.08346900459548355
     },
     "productive_challenge": {
-      "bias": -0.005401570897703149,
-      "codePenalty": -0.9148322419978736,
-      "completionRatio": 0.7819691125653252,
-      "correctnessSignal": -0.2901570897703107,
-      "historicalGradeAverage": 1.635212101077133,
-      "taskMetricWeight": -0.3051178173277358
+      "bias": 0.0021078119707353188,
+      "codePenalty": -1.0,
+      "completionRatio": 0.04764469709631874,
+      "correctnessSignal": 0.4607811970735321,
+      "historicalGradeAverage": 0.2822097090705143,
+      "taskMetricWeight": 0.2580858978051499
     },
     "secure_prior_mastery": {
-      "bias": -0.0006487179432273192,
-      "codePenalty": -0.8245338822404646,
-      "completionRatio": 0.6736897322091053,
-      "correctnessSignal": 0.15512820567727387,
-      "historicalGradeAverage": 0.3850860836540899,
-      "taskMetricWeight": -0.20653639745717817
+      "bias": 0.0009945290645613542,
+      "codePenalty": -1.0,
+      "completionRatio": 0.13502253127390207,
+      "correctnessSignal": 0.3194529064561342,
+      "historicalGradeAverage": 0.6592489088349671,
+      "taskMetricWeight": -0.06464233573689637
     }
   },
   "metadata": {
     "epochs": 650,
-    "finalLoss": 29.5638,
+    "finalLoss": 25.3954,
     "holdoutMetrics": {
       "count": 36,
-      "mae": 4.3342,
-      "r2": 0.9221,
-      "rmse": 5.8401
+      "mae": 3.5227,
+      "r2": 0.9364,
+      "rmse": 4.3674
     },
-    "initialLoss": 74.1202,
+    "initialLoss": 88.559,
     "learningRate": 2e-05,
     "sampleCount": 180,
     "splitSeed": 42,
+    "trainingMode": "synthetic_only",
     "trainingSampleCount": 144,
-    "trainingSource": "stored learner telemetry with synthetic bootstrap rows allowed",
+    "trainingSource": "stored deterministic synthetic bootstrap telemetry",
     "validationFraction": 0.2,
     "validationSampleCount": 36
   },

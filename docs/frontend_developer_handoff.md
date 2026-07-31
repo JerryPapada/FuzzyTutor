@@ -22,15 +22,7 @@ It already implements:
   - `recommendation`
   - `supportMessage`
 
-Important limitation: the current frontend submits directly to:
-
-```text
-POST /api/fuzzy/evaluate/
-```
-
-That endpoint is useful for standalone model demos, but it does **not** persist submissions, does **not** update learner sessions, does **not** store training data, and does **not** use backend next-task adaptation.
-
-The frontend must now switch to the learning-session workflow.
+The frontend uses the persistent learning-session workflow. `POST /api/fuzzy/evaluate/` remains available only for standalone engine demonstrations.
 
 ## 2. Backend Features Now Available
 
@@ -70,7 +62,7 @@ POST /api/learning/submissions/
 POST /api/learning/micro-surveys/
 ```
 
-## 3. Required Frontend Changes
+## 3. Implemented Frontend Contract
 
 ### 3.1 Create and Store a Session
 
@@ -188,17 +180,13 @@ The response includes the newly revealed `hint` and the complete restorable `hin
 
 ### 3.3 Replace Direct Fuzzy Evaluation With Submission Flow
 
-Current frontend behavior:
-
-```text
-POST /api/fuzzy/evaluate/
-```
-
-Required behavior:
+Persistent tutor behavior:
 
 ```text
 POST /api/learning/submissions/
 ```
+
+`POST /api/fuzzy/evaluate/` remains available for non-persistent engine demonstrations only.
 
 Payload:
 
@@ -207,30 +195,23 @@ Payload:
   "sessionToken": "abc123",
   "taskId": "lists-mcq-001",
   "elapsedTimeSeconds": 42.5,
-  "completionRatio": 1.0,
-  "selectedChoice": "Adds an item to the end",
-  "answerText": "",
-  "answerPayload": {
-    "clientTaskStartedAt": 1720000000000
-  }
+  "selectedChoice": "Adds an item to the end"
 }
 ```
 
-Do not send `assistanceInteractions`. The backend derives it from persisted hint events and rejects client-supplied values.
+Do not send `completionRatio`, `isCorrect`, `assistanceInteractions`, or `answerPayload`. Completion, correctness, assistance, skip state, and training metadata are controlled by the backend; client-supplied values are rejected.
 
 For MCQ:
 
 - Send `selectedChoice`.
+- Begin with no choice selected; a choice must belong to the task's published choices.
 - Do not send `isCorrect`; the backend derives correctness from its private answer key.
 
 For code tasks:
 
 - Send `answerText`.
 - Do **not** execute code in the frontend.
-- Use completion behavior:
-  - `completionRatio = 1` if the answer has meaningful content.
-  - `completionRatio = 0` if empty.
-  - Optionally use intermediate values later if the UI can detect partial progress.
+- Blank code or code equivalent to the normalized starter template is rejected. Prompt the learner to make a meaningful edit or explicitly skip.
 - Do not send `isCorrect`. Code completion is behavioral evidence, not correctness or automated grading.
 
 Response includes:
@@ -241,7 +222,7 @@ Response includes:
   "systemCognitiveFriction": 26.25,
   "focusState": "Needs Support",
   "recommendation": "increase_or_hold_high_tier",
-  "supportMessage": "Keep the tier steady and add a short explanation.",
+  "supportMessage": "Advance while keeping a hint or short explanation available.",
   "inputSnapshot": {},
   "engineTrace": {},
   "submissionId": 1,
@@ -266,6 +247,8 @@ Response includes:
   },
   "adaptation": {
     "direction": "increase",
+    "requestedDirection": "increase",
+    "constraintApplied": null,
     "targetDifficultyLevel": 2,
     "selectedDifficulty": "intermediate",
     "selectedScope": "module",
@@ -287,7 +270,8 @@ After submission:
 - Set `session` from `response.session`.
 - Set `surveyDue` from `response.surveyDue`.
 - Set the next active task from `response.nextTask`.
-- Reset timer and answer state for the new task.
+- Reset timer and answer state only when `nextTask.id` changes. Answer edits, local persistence, and review hydration must not reset elapsed time.
+- Disable hint, skip, and submit controls while a submission request is pending.
 
 ### 3.4 Use Backend-Selected Next Task
 
@@ -312,6 +296,7 @@ Recommended UX:
 - Show a small adaptation line:
 
 ```text
+Applied action: increase difficulty
 Next: intermediate task
 Reason: High mastery with low friction supports a harder or equivalent task.
 ```
@@ -490,7 +475,6 @@ Keep frontend-calculated:
 - elapsed time
 - selected choice
 - answer text
-- completion ratio
 
 ### Step 4: Adapted Task Navigation
 
@@ -529,6 +513,8 @@ The frontend is ready when:
 - XAI panel still displays mastery, friction, focus state, recommendation, and support message.
 - UI follows `response.nextTask` after each submission.
 - Adaptation reason is visible in friendly language.
+- Applied action is presented separately from focus; requested direction and constraints remain available in details.
+- Task submission requests omit `completionRatio`, and duplicate clicks cannot create competing requests.
 - Micro-survey appears every 5 submitted tasks.
 - Code tasks are not sandbox-graded.
 - Refresh does not immediately lose the learner session if localStorage is used.
@@ -565,7 +551,6 @@ curl -X POST http://localhost:8000/api/learning/submissions/ \
     "sessionToken": "SESSION_TOKEN_HERE",
     "taskId": "lists-mcq-001",
     "elapsedTimeSeconds": 40,
-    "completionRatio": 1,
     "selectedChoice": "Adds an item to the end"
   }'
 ```
