@@ -11,8 +11,9 @@ from .utils import clamp, left_shoulder, right_shoulder, triangular, weighted_av
 def correctness_signal(is_correct, completion_ratio):
     return performance_evidence(is_correct, completion_ratio)
 
-# Compute membership values for each linguistic variable
+
 def memberships(task_weight, historical_grade, completion_ratio, correctness_score):
+    """Fuzzify the four learner signals used by the mastery rules."""
     return {
         "challenge": {
             "foundation": left_shoulder(task_weight, 35.0, 60.0),
@@ -84,7 +85,6 @@ def rule_strengths(membership_values):
     return strengths, coverage_guard_used
 
 
-# Compute the predicted mastery score using the ANFIS model
 def predict_mastery(
     task_weight,
     historical_grade,
@@ -92,6 +92,7 @@ def predict_mastery(
     task_type,
     is_correct=None,
 ):
+    """Predict mastery and return enough intermediate state to explain it."""
     correctness_score = correctness_signal(is_correct, completion_ratio)
     membership_values = memberships(
         task_weight,

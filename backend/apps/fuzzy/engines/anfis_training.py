@@ -74,11 +74,11 @@ def performance_evidence(is_correct, completion_ratio):
         return 20.0
     return 40.0 + (clamp(completion_ratio, 0.0, 1.0) * 25.0)
 
-# paths
 def default_parameters_path():
+    """Keep the trained artifact with the engine so Docker and local runs agree."""
     return Path(settings.BASE_DIR) / "apps" / "fuzzy" / "trained" / "anfis_parameters.json"
 
-# load trained model parameters
+
 def load_trained_parameters(path=None):
     parameter_path = Path(path) if path else default_parameters_path()
     if not parameter_path.exists():
@@ -86,7 +86,7 @@ def load_trained_parameters(path=None):
     with parameter_path.open("r", encoding="utf-8") as parameter_file:
         return json.load(parameter_file)
 
-# save trained model parameters
+
 def save_trained_parameters(parameters, path=None):
     parameter_path = Path(path) if path else default_parameters_path()
     parameter_path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,8 +94,10 @@ def save_trained_parameters(parameters, path=None):
         json.dump(parameters, parameter_file, indent=2, sort_keys=True)
     return parameter_path
 
-# generate feature vector for a given task
+
 def feature_vector(task_weight, historical_grade, completion_ratio, correctness_score, task_type):
+    """Build the first-order consequent inputs used in training and inference."""
+    # Incomplete code is weak evidence, not an incorrect answer: code tasks are not graded.
     code_penalty = 3.0 if str(task_type).lower() == "code" and completion_ratio < 1 else 0.0
     return {
         "historicalGradeAverage": clamp(historical_grade),
@@ -106,12 +108,13 @@ def feature_vector(task_weight, historical_grade, completion_ratio, correctness_
         "bias": 1.0,
     }
 
-# compute the consequent output for a given rule and feature vector
+
 def consequent_output(weights, features):
     return clamp(sum(weights[name] * features[name] for name in FEATURE_NAMES))
 
-# compute a synthetic target mastery score based on input features
+
 def synthetic_target_mastery(row):
+    """Apply the declared teaching heuristic used to label bootstrap records."""
     speed_score = clamp(100.0 - abs(float(row["relativeResponseTime"]) - 1.0) * 35.0)
     confidence = clamp((float(row.get("confidenceScore") or 3) - 1.0) * 25.0)
     perceived_difficulty = float(row.get("perceivedDifficulty") or 3)
@@ -130,8 +133,9 @@ def synthetic_target_mastery(row):
     )
     return clamp(target)
 
-# generate synthetic training data rows for ANFIS model training
+
 def generate_synthetic_training_rows(count=180, seed=42):
+    """Create a repeatable bootstrap dataset until real learner data is available."""
     rng = random.Random(seed)
     profiles = [
         {
@@ -211,8 +215,9 @@ def generate_synthetic_training_rows(count=180, seed=42):
         rows.append(row)
     return rows
 
-# Train the consequent parameters of the ANFIS model
+
 def train_consequent_parameters(samples, initial_weights=None, epochs=650, learning_rate=0.00002):
+    """Fit TSK consequent weights while leaving the premise sets interpretable."""
     weights = json.loads(json.dumps(initial_weights or DEFAULT_CONSEQUENT_WEIGHTS))
     losses = []
     for _epoch in range(epochs):

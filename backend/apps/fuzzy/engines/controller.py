@@ -11,21 +11,19 @@ FOCUS_THRESHOLDS = {
     "low_mastery_max": 45.0,
 }
 
-# Determine the focus state based on cognitive friction and mastery
 def focus_state_for(friction, mastery):
-    # If the student has low cognitive friction and high mastery, they are focused and steady.
+    """Translate the two numeric outputs into a calm learner-facing state."""
     if (friction < FOCUS_THRESHOLDS["steady_friction_max"]
         and mastery >= FOCUS_THRESHOLDS["steady_mastery_min"]
     ):
         return "Focused & Steady"
-    # If the student has high cognitive friction, they may need support or be frustrated.
     if friction < FOCUS_THRESHOLDS["support_friction_max"]:
         return "Needs Support"
     return "Frustrated"
 
-# Determine the recommendation based on mastery and cognitive friction
+
 def recommendation_for(mastery, friction):
-    # If the student has high mastery and low cognitive friction, recommend increasing or holding the current tier.
+    """Choose the requested adaptation; the catalog applies floor/ceiling limits."""
     if (
         mastery >= FOCUS_THRESHOLDS["high_mastery_min"]
         and friction < 35.0
@@ -39,8 +37,8 @@ def recommendation_for(mastery, friction):
         return "reduce_difficulty_and_show_support"
     return "hold_current_tier"
 
-# Explain the learner state and requested action without conflating the two.
 def support_message_for(focus_state, recommendation):
+    """Explain the action without treating every non-steady state as failure."""
     if recommendation == "increase_or_hold_high_tier":
         if focus_state == "Focused & Steady":
             return "The learner looks ready for the next challenge."
@@ -51,8 +49,8 @@ def support_message_for(focus_state, recommendation):
         return "Continue in the current band and reinforce this steady progress."
     return "Continue in the current band with an optional hint or short explanation."
 
-# Evaluate the learning state based on various inputs and return a structured result
 def evaluate_learning_state(inputs):
+    """Run both engines and return their combined decision and audit trace."""
     task_weight = clamp(inputs["taskMetricWeight"])
     historical_grade = clamp(inputs["historicalGradeAverage"])
     relative_time = max(0.0, float(inputs["relativeResponseTime"]))

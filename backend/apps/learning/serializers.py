@@ -3,7 +3,6 @@ from .catalog import get_task
 from .models import LearnerSession
 from .progress import curriculum_complete
 
-# Serializers for the learning app
 class SessionCreateSerializer(serializers.Serializer):
     moduleId = serializers.IntegerField(required=False, min_value=1)
     taskId = serializers.CharField(required=False, allow_blank=True)
@@ -21,7 +20,6 @@ class SessionCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"moduleId": "Unknown module id."})
         return attrs
 
-# Serializer for the session model
 class SessionSerializer(serializers.ModelSerializer):
     sessionToken = serializers.CharField(source="token")
     currentModuleId = serializers.IntegerField(source="current_module_id")
@@ -53,8 +51,8 @@ class SessionSerializer(serializers.ModelSerializer):
     def get_curriculumComplete(self, obj):
         return curriculum_complete(obj)
 
-# Serializer for task submission data
 class SubmissionSerializer(serializers.Serializer):
+    """Validate public response fields and derive private grading metadata."""
     sessionToken = serializers.CharField()
     taskId = serializers.CharField()
     elapsedTimeSeconds = serializers.FloatField(min_value=0.1)
@@ -198,7 +196,6 @@ class HintRequestSerializer(serializers.Serializer):
         return attrs
 
 
-# Serializer for micro-survey responses
 class MicroSurveySerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     satisfactionScore = serializers.IntegerField(min_value=1, max_value=5)
@@ -222,7 +219,8 @@ class MicroSurveySerializer(serializers.Serializer):
         return attrs
 
 
-# Explicit response serializers keep the generated OpenAPI contract useful to clients.
+# These response-only serializers are verbose by design: they keep Swagger useful
+# and prevent accidental API changes while the React client is developed separately.
 class ErrorResponseSerializer(serializers.Serializer):
     detail = serializers.CharField(required=False)
     moduleId = serializers.CharField(required=False)
@@ -235,13 +233,11 @@ class ErrorResponseSerializer(serializers.Serializer):
     selectedChoice = serializers.CharField(required=False)
     answerText = serializers.CharField(required=False)
 
-# Serializer for difficulty counts in a module
 class DifficultyCountsSerializer(serializers.Serializer):
     foundation = serializers.IntegerField()
     intermediate = serializers.IntegerField()
     advanced = serializers.IntegerField()
 
-# Serializer for module response data
 class ModuleResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     title = serializers.CharField()
@@ -251,11 +247,9 @@ class ModuleResponseSerializer(serializers.Serializer):
     taskCount = serializers.IntegerField()
     difficultyCounts = DifficultyCountsSerializer()
 
-# Serializer for a list of modules in the response
 class ModulesResponseSerializer(serializers.Serializer):
     modules = ModuleResponseSerializer(many=True)
 
-# Serializer for task response data
 class TaskResponseSerializer(serializers.Serializer):
     id = serializers.CharField()
     moduleId = serializers.IntegerField()
@@ -327,7 +321,6 @@ class ModuleProgressResponseSerializer(serializers.Serializer):
     completedAt = serializers.DateTimeField(allow_null=True)
 
 
-# Serializer for task navigation response data
 class TaskNavigationResponseSerializer(serializers.Serializer):
     task = TaskResponseSerializer(allow_null=True)
     position = serializers.IntegerField()
@@ -335,7 +328,6 @@ class TaskNavigationResponseSerializer(serializers.Serializer):
     hasPrevious = serializers.BooleanField()
     hasNext = serializers.BooleanField()
 
-# Serializer for task catalog response data
 class TaskCatalogResponseSerializer(serializers.Serializer):
     tasks = TaskResponseSerializer(many=True)
     activeTask = TaskNavigationResponseSerializer()
@@ -352,7 +344,6 @@ class OrderedAttemptResponseSerializer(serializers.Serializer):
     submittedAt = serializers.DateTimeField()
 
 
-# Serializer for session state response data
 class SessionStateResponseSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     currentModuleId = serializers.IntegerField()
@@ -370,18 +361,15 @@ class SessionStateResponseSerializer(serializers.Serializer):
     hintState = HintStateResponseSerializer()
     moduleProgress = ModuleProgressResponseSerializer(many=True)
 
-# Serializer for the current session task response data
 class CurrentSessionTaskResponseSerializer(serializers.Serializer):
     task = TaskResponseSerializer(allow_null=True)
     session = SessionStateResponseSerializer()
 
-# Serializer for adaptation signals response data
 class AdaptationSignalsResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
     systemCognitiveFriction = serializers.FloatField()
     recommendation = serializers.CharField()
 
-# Serializer for adaptation response data
 class AdaptationResponseSerializer(serializers.Serializer):
     direction = serializers.CharField()
     requestedDirection = serializers.CharField()
@@ -415,7 +403,6 @@ class ModuleDecisionResponseSerializer(serializers.Serializer):
     nextModuleId = serializers.IntegerField(allow_null=True)
 
 
-# Serializer for submission response data
 class SubmissionResponseSerializer(serializers.Serializer):
     knowledgeMastery = serializers.FloatField()
     systemCognitiveFriction = serializers.FloatField()
@@ -432,7 +419,6 @@ class SubmissionResponseSerializer(serializers.Serializer):
     hintUsage = HintUsageResponseSerializer()
     surveyDue = serializers.BooleanField()
 
-# Serializer for micro-survey response data
 class MicroSurveyResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     sessionToken = serializers.CharField()
@@ -443,7 +429,6 @@ class MicroSurveyResponseSerializer(serializers.Serializer):
     milestoneTaskCount = serializers.IntegerField()
     surveyDue = serializers.BooleanField()
 
-# Serializer for a single row of training data
 class TrainingDataRowSerializer(serializers.Serializer):
     sessionToken = serializers.CharField()
     taskId = serializers.CharField()
@@ -471,7 +456,6 @@ class TrainingDataRowSerializer(serializers.Serializer):
     confidenceScore = serializers.IntegerField(allow_null=True)
     createdAt = serializers.DateTimeField()
 
-# Serializer for training data export response
 class TrainingDataExportResponseSerializer(serializers.Serializer):
     rows = TrainingDataRowSerializer(many=True)
     count = serializers.IntegerField()

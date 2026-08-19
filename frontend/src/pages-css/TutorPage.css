@@ -134,8 +134,8 @@
 .module-panel {
   display: flex;
   flex-direction: column;
+  /* Keep the module timeline aligned with the main task card on desktop. */
   height: 550px;
-  /* Matches the height of the task window */
   padding: 20px;
 }
 
@@ -171,7 +171,7 @@
   padding-right: 6px;
 }
 
-/* Custom Scrollbar for Module List */
+/* A narrow scrollbar leaves more room for long module titles. */
 .module-list::-webkit-scrollbar {
   width: 6px;
 }
@@ -200,7 +200,7 @@
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: visible;
-  /* Let the timeline line connect outside */
+  /* The timeline line extends into the gap between module rows. */
   flex-shrink: 0;
 }
 
@@ -245,7 +245,7 @@
   font-size: 0.85rem;
   transition: all 0.2s ease;
   z-index: 2;
-  /* Sit on top of the line */
+  /* Circles mask the vertical timeline behind them. */
 }
 
 .module-indicator .circle.completed {
@@ -267,7 +267,6 @@
 
 .module-indicator .circle.current {
   background: var(--bg-panel);
-  /* Solid color to cover the line segment behind it */
   border: 2px solid var(--primary-accent);
   color: var(--primary-accent);
   animation: active-circle-pulse 2s infinite ease-in-out;
@@ -275,7 +274,6 @@
 
 .module-indicator .circle.locked {
   background: var(--bg-panel);
-  /* Solid color to cover the line segment behind it */
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
 }
@@ -293,7 +291,7 @@
   flex-grow: 1;
   margin-top: 8px;
   margin-bottom: -32px;
-  /* Connects past gap and padding seamlessly to next circle */
+  /* Negative margin joins the line to the next row without a visible break. */
   z-index: 1;
 }
 
@@ -378,8 +376,8 @@
 .task-window {
   display: flex;
   flex-direction: column;
+  /* Avoid a short middle column when the XAI card contains a full trace. */
   min-height: 450px;
-  /* Matches the approximate height of the Explainable AI panel */
   padding: 26px;
   border: 1px solid var(--border-subtle);
   border-radius: 20px;
@@ -445,7 +443,7 @@
   margin-bottom: 18px;
 }
 
-/* Progress pills in header */
+/* Compact attempt progress for the current module. */
 .progress-pills {
   display: flex;
   gap: 6px;
@@ -474,7 +472,6 @@
 
 .progress-pill.active {
   background: var(--primary-accent);
-  /* Blue active color */
   animation: active-pill-glow 1.8s infinite ease-in-out;
 }
 
@@ -833,9 +830,7 @@
   align-items: center;
   justify-content: center;
   background-color: #3b82f6;
-  /* Accent blue from screenshot */
   color: #17212b;
-  /* Dark icon prompt color */
   border-radius: 8px;
   width: 34px;
   height: 38px;
@@ -853,7 +848,7 @@
   line-height: 1;
 }
 
-/* Custom Notification Toast */
+/* Submission feedback stays visible without shifting the workspace. */
 .custom-notification {
   position: fixed;
   top: 0;
@@ -899,7 +894,7 @@
   font-family: "Outfit", "Inter", sans-serif;
 }
 
-/* Review Panel styling */
+/* Incorrect and skipped attempts are reviewed separately from live tasks. */
 .review-panel {
   margin-top: 24px;
   padding: 20px;
@@ -961,7 +956,7 @@
   color: var(--text-muted);
 }
 
-/* Micro-Survey Modal Styles */
+/* Five-task micro-survey. */
 .survey-modal-overlay {
   position: fixed;
   top: 0;
@@ -1112,7 +1107,7 @@
   to { transform: scale(1); opacity: 1; }
 }
 
-/* Explainable AI Rich Styles */
+/* Optional engine detail beneath the learner-facing explanation. */
 .adaptation-info {
   margin-top: 18px;
   padding: 16px;
@@ -1285,7 +1280,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Active Task Hints & Help styles */
+/* Hints appear in reveal order and remain visible after refresh. */
 .task-navigation button.hint-btn {
   background: rgba(88, 166, 255, 0.08);
   border: 1px solid rgba(88, 166, 255, 0.15);
@@ -1350,7 +1345,7 @@
   color: var(--text-main);
 }
 
-/* Custom Reset Modal Styles */
+/* Session reset confirmation. */
 .modal-actions {
   display: flex;
   justify-content: center;
@@ -1393,7 +1388,7 @@
   box-shadow: 0 6px 20px rgba(234, 67, 53, 0.35);
 }
 
-/* Custom Help Modal Styles */
+/* Workspace help dialog. */
 .help-modal-card {
   max-width: 650px !important;
   text-align: left !important;
@@ -1411,7 +1406,7 @@
   margin-bottom: 24px;
 }
 
-/* Custom scrollbar for premium look */
+/* Keep the help dialog compact on shorter screens. */
 .help-modal-content::-webkit-scrollbar {
   width: 6px;
 }

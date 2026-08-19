@@ -1,7 +1,7 @@
 ---
 title: "FuzzyTutor"
 subtitle: "Technical Project Report, Fuzzy-System Definition, Evaluation, and User Manual"
-date: "30 July 2026"
+date: "19 August 2026"
 lang: en
 toc: true
 toc-depth: 3
@@ -10,16 +10,16 @@ geometry: margin=2.2cm
 
 # Executive summary
 
-FuzzyTutor is a web-based adaptive tutor for programming concepts. It was designed as a joint project for the Fuzzy Logic and Systems course and the User Experience and Artificial Intelligence course. The system combines two complementary inference engines:
+We built FuzzyTutor as a web-based adaptive tutor for programming concepts and as a joint project for the Fuzzy Logic and Systems course and the User Experience and Artificial Intelligence course. The central idea was to keep academic performance and learning friction separate, so the system uses two complementary inference engines:
 
 1. a first-order Takagi--Sugeno ANFIS implementation that predicts a continuous Knowledge Mastery score; and
 2. a Mamdani fuzzy inference system that estimates System Cognitive Friction from observable learning behavior.
 
-The backend synthesizes both outputs to select the difficulty of the next uncompleted task. The user interface can explain the decision through mastery and friction gauges, a focus-state label, a support message, and a human-readable adaptation reason. Short satisfaction surveys are requested at persistent five-task milestones.
+The backend combines both outputs when it selects the next uncompleted task. In the interface, the learner sees mastery and friction gauges, a focus-state label, a short support message, and the reason for the difficulty change. A short satisfaction survey appears after every five completed tasks and remains due after a refresh.
 
-The application uses Django and Django REST Framework for the backend, React and Vite for the frontend, SQLite for assignment-scale persistence, and Docker Compose for reproducible execution. The architecture is decoupled: the frontend consumes explicit JSON contracts and does not contain fuzzy rules or answer keys.
+We used Django and Django REST Framework for the backend, React and Vite for the frontend, SQLite for assignment-scale persistence, and Docker Compose so the same setup can be demonstrated on another machine. The frontend only consumes JSON contracts; fuzzy rules and answer keys stay on the backend.
 
-No historical learner dataset was available. Therefore, ANFIS training uses a deterministic synthetic bootstrap dataset that represents five plausible behavioral profiles. This is appropriate for demonstrating the full training and inference pipeline at assignment scale, but it is not presented as evidence about a real student population. A fixed 80/20 holdout split is used so evaluation rows are not used to fit model parameters.
+We did not have a historical learner dataset. For that reason, the ANFIS training pipeline starts from a deterministic synthetic dataset with five plausible behavioral profiles. This lets us demonstrate training and inference, but it is not evidence about a real student population. We use a fixed 80/20 holdout split so the evaluation rows are not used to fit the model parameters.
 
 # Requirements and scope
 
@@ -39,7 +39,11 @@ The implemented system addresses the final joint project definition as follows:
 | Feedback loop | Persistent micro-survey every five completed tasks and telemetry export |
 | Decoupled web application | Django REST API and React frontend in separate containers |
 
-The backend is intentionally assignment-scale. It uses anonymous session tokens and SQLite rather than production identity, authorization, and distributed infrastructure. Those choices keep the implementation inspectable during assessment and do not affect the fuzzy-system demonstration.
+The backend is intentionally assignment-scale. We chose anonymous session tokens and SQLite instead of adding production identity, authorization, and distributed infrastructure. This keeps the implementation small enough to inspect during the presentation while still exercising the fuzzy system end to end.
+
+## Design choices and trade-offs
+
+Three decisions shaped the implementation. We do not automatically grade code-writing tasks: completion is behavioral evidence, while correctness stays unknown. The browser also never decides correctness or hint counts. The backend derives both from private task data and stored hint events, which avoids leaking answer keys and makes the telemetry easier to trust. Finally, the interface shows a short explanation before the full rule trace. Raw memberships helped us debug the system, but they belong in the expandable demonstration view rather than the learner's main workspace.
 
 # System architecture
 
@@ -344,6 +348,8 @@ The verified suites contain 42 backend tests and 6 frontend tests. Django system
 
 # Limitations and future improvements
 
+The main limitations are:
+
 1. Synthetic records demonstrate the model pipeline but do not replace real learner data. With consent and appropriate anonymization, later work should retrain and recalibrate membership parameters from actual sessions.
 2. ANFIS premise membership parameters are fixed for interpretability; only consequent parameters are trained. A larger study could compare this transparent variant with hybrid premise/consequent learning.
 3. Mastery is tracked globally and per module, but not yet per individual concept tag. A longer deployment could maintain finer-grained knowledge components.
@@ -352,4 +358,4 @@ The verified suites contain 42 backend tests and 6 frontend tests. Django system
 
 # Conclusion
 
-FuzzyTutor provides an operational, explainable adaptive-learning backend rather than a static demonstration formula. It explicitly defines fuzzy variables, membership functions, rules, aggregation, and defuzzification; trains and evaluates a versioned ANFIS consequent model on held-out synthetic data; applies a genuine Mamdani centroid calculation; persists learner behavior and feedback; and converts model outputs into safe, non-repeating curriculum adaptation. The result is well matched to the scope and difficulty of the joint postgraduate assignment while remaining transparent about the absence of real learner data and production deployment controls.
+The prototype meets the joint assignment goals in a workflow that is practical to demonstrate: a learner can complete tasks, ask for help, see an explanation, and receive an adapted next task. The project defines and tests the fuzzy variables, rules, inference methods, trained ANFIS consequents, and evidence behind each decision. Until it is tested with real learners, however, the synthetic results show that the pipeline works as designed, not that it improves learning outcomes.

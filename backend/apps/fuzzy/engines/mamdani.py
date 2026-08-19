@@ -8,8 +8,8 @@ OUTPUT_SETS = {
     "severe": {"shape": "right_shoulder", "parameters": [72.0, 92.0]},
 }
 
-# Compute the membership value for a given output set and value
 def output_membership(consequent, value):
+    """Evaluate one of the named friction output sets."""
     output_set = OUTPUT_SETS[consequent]
     parameters = output_set["parameters"]
     if output_set["shape"] == "left_shoulder":
@@ -18,7 +18,6 @@ def output_membership(consequent, value):
         return right_shoulder(value, *parameters)
     return triangular(value, *parameters)
 
-# Compute the centroid of the aggregated output area for defuzzification
 def centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0):
     """Clip consequent sets, aggregate them with max, and calculate area centroid."""
     universe = [index * resolution for index in range(int(100 / resolution) + 1)]
@@ -39,8 +38,8 @@ def centroid_of_aggregated_output(active_rules, resolution=0.25, fallback=25.0):
     centroid = sum(value * membership for value, membership in zip(universe, aggregated)) / denominator
     return centroid, denominator * resolution
 
-# Compute membership values for each linguistic variable
 def memberships(relative_response_time, assistance_interactions, completion_ratio):
+    """Fuzzify behavior without using answer correctness as a stress proxy."""
     time_pressure = {
         "low": left_shoulder(relative_response_time, 0.45, 0.95),
         "normal": triangular(relative_response_time, 0.65, 1.0, 1.45),
@@ -62,14 +61,13 @@ def memberships(relative_response_time, assistance_interactions, completion_rati
         "completion": completion,
     }
 
-# Compute the predicted cognitive friction score using fuzzy inference
 def infer_cognitive_friction(
     relative_response_time,
     assistance_interactions,
     completion_ratio,
     task_type,
 ):
-    # Compute membership values for the input variables
+    """Estimate friction with Mamdani inference and expose its active rules."""
     membership_values = memberships(
         relative_response_time,
         assistance_interactions,
@@ -79,7 +77,7 @@ def infer_cognitive_friction(
     assistance = membership_values["assistance"]
     completion = membership_values["completion"]
     is_code_task = str(task_type).lower() == "code"
-    # Define the fuzzy rules and their corresponding outputs based on the memberships
+    # Rules are named after recognizable learning situations for easier demonstrations.
     rule_specs = [
         (
             "steady_complete",

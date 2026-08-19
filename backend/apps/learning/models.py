@@ -1,11 +1,11 @@
 import uuid
 from django.db import models
 
-# session token gen
 def generate_session_token():
+    """Use an opaque token so the demo does not need learner accounts."""
     return uuid.uuid4().hex
 
-# Session model to track progress
+
 class LearnerSession(models.Model):
     token = models.CharField(max_length=64, unique=True, default=generate_session_token)
     current_module_id = models.PositiveIntegerField(default=1)
@@ -99,7 +99,6 @@ class ModuleProgress(models.Model):
         ]
 
 
-# Task submission model to track performance
 class TaskSubmission(models.Model):
     session = models.ForeignKey(
         LearnerSession,
@@ -139,8 +138,8 @@ class TaskSubmission(models.Model):
         ]
 
 
-# Immutable record of each progressive hint revealed during the current task.
 class HintEvent(models.Model):
+    """Immutable hint history used to derive assistance on the server."""
     session = models.ForeignKey(
         LearnerSession,
         related_name="hint_events",
@@ -171,8 +170,8 @@ class HintEvent(models.Model):
         ]
 
 
-# Fuzzy evaluation log model to store fuzzy engine results
 class FuzzyEvaluationLog(models.Model):
+    """Snapshot the decision so an adaptation can be explained later."""
     session = models.ForeignKey(
         LearnerSession,
         related_name="fuzzy_logs",
@@ -199,7 +198,6 @@ class FuzzyEvaluationLog(models.Model):
             models.Index(fields=["recommendation"]),
         ]
 
-# Micro-survey response model to capture learner feedback
 class MicroSurveyResponse(models.Model):
     session = models.ForeignKey(
         LearnerSession,
