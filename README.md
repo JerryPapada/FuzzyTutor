@@ -57,4 +57,5 @@ docker compose run --rm frontend npm test
 docker compose run --rm frontend npm run build
 ```
 
-The technical report and user manual are in `docs/FuzzyTutor_Technical_Report.pdf`, with its editable source beside it.
+The consolidated theory, implementation, worked example, and presentation notes are in
+`output/pdf/FuzzyTutor_Master_Study_Guide.pdf`.
